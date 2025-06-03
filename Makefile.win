@@ -4,13 +4,13 @@
 CPP      = g++.exe
 CC       = gcc.exe
 WINDRES  = windres.exe
-OBJ      = obj/main.o
-LINKOBJ  = obj/main.o
+OBJ      = obj/main.o obj/ChessAI.o obj/GameManager.o
+LINKOBJ  = obj/main.o obj/ChessAI.o obj/GameManager.o
 LIBS     = -L"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/lib" -L"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/x86_64-w64-mingw32/lib" -static-libgcc -L"C:/Users/Laptop/Desktop/CodeProjects/NeuralNetwork/SDL2-2.32.0/x86_64-w64-mingw32/lib" -L"C:/Users/Laptop/Desktop/CodeProjects/NeuralNetwork/SDL2_image-2.8.5/x86_64-w64-mingw32/lib" -lmingw32 -lSDL2main -lSDL2 -lSDL2_image
 INCS     = -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/include" -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/x86_64-w64-mingw32/include" -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/9.2.0/include" -I"C:/Users/Laptop/Desktop/CodeProjects/NeuralNetwork/SDL2-2.32.0/x86_64-w64-mingw32/include/SDL2" -I"C:/Users/Laptop/Desktop/CodeProjects/NeuralNetwork/SDL2_image-2.8.5/x86_64-w64-mingw32/include/SDL2"
 CXXINCS  = -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/include" -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/x86_64-w64-mingw32/include" -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/9.2.0/include" -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/9.2.0/include/c++" -I"C:/Users/Laptop/Desktop/CodeProjects/NeuralNetwork/SDL2-2.32.0/x86_64-w64-mingw32/include/SDL2" -I"C:/Users/Laptop/Desktop/CodeProjects/NeuralNetwork/SDL2_image-2.8.5/x86_64-w64-mingw32/include/SDL2"
 BIN      = NeuralNetwork.exe
-CXXFLAGS = $(CXXINCS) 
+CXXFLAGS = $(CXXINCS) -std=c++17
 CFLAGS   = $(INCS) 
 DEL      = C:\Program Files (x86)\Embarcadero\Dev-Cpp\DevCpp.exe INTERNAL_DEL
 
@@ -26,3 +26,9 @@ $(BIN): $(OBJ)
 
 obj/main.o: main.cpp
 	$(CPP) -c main.cpp -o obj/main.o $(CXXFLAGS)
+
+obj/ChessAI.o: ChessAI.cpp
+	$(CPP) -c ChessAI.cpp -o obj/ChessAI.o $(CXXFLAGS)
+
+obj/GameManager.o: GameManager.cpp
+	$(CPP) -c GameManager.cpp -o obj/GameManager.o $(CXXFLAGS)
