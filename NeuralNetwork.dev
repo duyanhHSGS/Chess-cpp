@@ -15,7 +15,7 @@ Linker=-lmingw32 -lSDL2main -lSDL2 -lSDL2_image_@@_
 IsCpp=1
 Icon=
 ExeOutput=
-ObjectOutput=
+ObjectOutput=C:\Users\Laptop\Desktop\CodeProjects\NeuralNetwork\obj
 LogOutput=
 LogOutputEnabled=0
 OverrideOutput=0
@@ -29,7 +29,7 @@ IncludeVersionInfo=0
 SupportXPThemes=0
 CompilerSet=7
 CompilerSettings=0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;8;0;0;0
-UnitCount=3
+UnitCount=1
 
 [VersionInfo]
 Major=1

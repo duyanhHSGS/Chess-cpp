@@ -7,7 +7,7 @@
 #include <algorithm>
 
 const int TILE_SIZE = 56;
-const SDL_FPoint OFFSET = {28.0f, 28.0f};
+const SDL_Point OFFSET = {28, 28};
 
 int board[8][8] = {
     {-1, -2, -3, -4, -5, -3, -2, -1},
@@ -30,9 +30,9 @@ struct ChessPiece {
 class GameManager {
 public:
     ChessPiece pieces[33];
-    SDL_FPoint possibleMoves[32];
+    SDL_Point possibleMoves[32];
     int possibleMoveCount;
-    std::stack<SDL_FPoint> positionStack;
+    std::stack<SDL_Point> positionStack;
     std::stack<int> pieceIndexStack;
 
     SDL_Window* window = nullptr;
@@ -44,7 +44,7 @@ public:
     void initializeSDL();
     void cleanUpSDL();
 
-    void movePiece(int pieceIdx, SDL_FPoint oldPos, SDL_FPoint newPos);
+    void movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos);
     void undoLastMove();
     void createPieces();
     void playGame();
@@ -60,7 +60,7 @@ public:
 
     int calculateBoardCost();
     int alphaBeta(int depth, bool isMaximizingPlayer, int alpha, int beta);
-    SDL_FPoint getBestMove(bool isMaximizingPlayer);
+    SDL_Point getBestMove(bool isMaximizingPlayer);
 };
 
 void GameManager::initializeSDL() {
@@ -132,7 +132,7 @@ int GameManager::alphaBeta(int depth, bool isMaximizingPlayer, int alpha, int be
         return calculateBoardCost();
     }
 
-    SDL_FPoint possibleMoveTemp[32];
+    SDL_Point possibleMoveTemp[32];
 
     if (isMaximizingPlayer) {
         int bestMoveValue = -10000;
@@ -148,7 +148,7 @@ int GameManager::alphaBeta(int depth, bool isMaximizingPlayer, int alpha, int be
             }
 
             for (int i = 0; i < currentPossibleMoveCount; i++) {
-                movePiece(j, {static_cast<float>(pieces[j].rect.x), static_cast<float>(pieces[j].rect.y)}, possibleMoveTemp[i]);
+                movePiece(j, {pieces[j].rect.x, pieces[j].rect.y}, possibleMoveTemp[i]);
                 bestMoveValue = std::max(bestMoveValue, alphaBeta(depth - 1, !isMaximizingPlayer, alpha, beta));
                 undoLastMove();
                 alpha = std::max(alpha, bestMoveValue);
@@ -170,7 +170,7 @@ int GameManager::alphaBeta(int depth, bool isMaximizingPlayer, int alpha, int be
             }
 
             for (int i = 0; i < currentPossibleMoveCount; i++) {
-                movePiece(j, {static_cast<float>(pieces[j].rect.x), static_cast<float>(pieces[j].rect.y)}, possibleMoveTemp[i]);
+                movePiece(j, {pieces[j].rect.x, pieces[j].rect.y}, possibleMoveTemp[i]);
                 bestMoveValue = std::min(bestMoveValue, alphaBeta(depth - 1, !isMaximizingPlayer, alpha, beta));
                 undoLastMove();
                 beta = std::min(beta, bestMoveValue);
@@ -182,16 +182,16 @@ int GameManager::alphaBeta(int depth, bool isMaximizingPlayer, int alpha, int be
 }
 
 void GameManager::addPossibleMove(int x, int y) {
-    possibleMoves[possibleMoveCount] = {static_cast<float>(x * TILE_SIZE) + OFFSET.x, static_cast<float>(y * TILE_SIZE) + OFFSET.y};
+    possibleMoves[possibleMoveCount] = {x * TILE_SIZE + OFFSET.x, y * TILE_SIZE + OFFSET.y};
     possibleMoveCount++;
 }
 
-void GameManager::movePiece(int pieceIdx, SDL_FPoint oldPos, SDL_FPoint newPos) {
+void GameManager::movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) {
     positionStack.push(oldPos);
     positionStack.push(newPos);
     pieceIndexStack.push(pieceIdx);
 
-    int newY = static_cast<int>((newPos.y - OFFSET.y) / TILE_SIZE);
+    int newY = (newPos.y - OFFSET.y) / TILE_SIZE;
 
     if (newY == 0 && pieces[pieceIdx].index == 6) {
         pieceIndexStack.push(100);
@@ -209,29 +209,29 @@ void GameManager::movePiece(int pieceIdx, SDL_FPoint oldPos, SDL_FPoint newPos) 
     }
 
     for (int i = 0; i < 32; i++) {
-        SDL_Rect newPosRect = {static_cast<int>(newPos.x), static_cast<int>(newPos.y), TILE_SIZE, TILE_SIZE};
+        SDL_Rect newPosRect = {newPos.x, newPos.y, TILE_SIZE, TILE_SIZE};
         if (SDL_HasIntersection(&pieces[i].rect, &newPosRect) && i != pieceIdx) {
-            SDL_FPoint capturedOldPos = {static_cast<float>(pieces[i].rect.x), static_cast<float>(pieces[i].rect.y)};
+            SDL_Point capturedOldPos = {pieces[i].rect.x, pieces[i].rect.y};
             pieces[i].rect.x = -100;
             pieces[i].rect.y = -100;
 
             positionStack.push(capturedOldPos);
-            positionStack.push({-100.0f, -100.0f});
+            positionStack.push({-100, -100});
             pieceIndexStack.push(i);
             break;
         }
     }
-    pieces[pieceIdx].rect.x = static_cast<int>(newPos.x);
-    pieces[pieceIdx].rect.y = static_cast<int>(newPos.y);
+    pieces[pieceIdx].rect.x = newPos.x;
+    pieces[pieceIdx].rect.y = newPos.y;
 }
 
 void GameManager::undoLastMove() {
     int pieceIdx = pieceIndexStack.top();
     pieceIndexStack.pop();
 
-    SDL_FPoint newPos = positionStack.top();
+    SDL_Point newPos = positionStack.top();
     positionStack.pop();
-    SDL_FPoint oldPos = positionStack.top();
+    SDL_Point oldPos = positionStack.top();
     positionStack.pop();
 
     if (pieceIdx == 100) {
@@ -247,10 +247,10 @@ void GameManager::undoLastMove() {
         pieces[pieceIdx].cost = -10;
     }
 
-    pieces[pieceIdx].rect.x = static_cast<int>(oldPos.x);
-    pieces[pieceIdx].rect.y = static_cast<int>(oldPos.y);
+    pieces[pieceIdx].rect.x = oldPos.x;
+    pieces[pieceIdx].rect.y = oldPos.y;
 
-    if (newPos.x == -100.0f && newPos.y == -100.0f) {
+    if (newPos.x == -100 && newPos.y == -100) {
         undoLastMove();
     }
 }
@@ -269,8 +269,8 @@ void GameManager::createPieces() {
             pieces[k].texture = figuresTexture;
             pieces[k].index = n;
             pieces[k].rect = {xTex * TILE_SIZE, yTex * TILE_SIZE, TILE_SIZE, TILE_SIZE};
-            pieces[k].rect.x = j * TILE_SIZE + static_cast<int>(OFFSET.x);
-            pieces[k].rect.y = i * TILE_SIZE + static_cast<int>(OFFSET.y);
+            pieces[k].rect.x = j * TILE_SIZE + OFFSET.x;
+            pieces[k].rect.y = i * TILE_SIZE + OFFSET.y;
             pieces[k].rect.w = TILE_SIZE;
             pieces[k].rect.h = TILE_SIZE;
 
@@ -287,11 +287,11 @@ void GameManager::createPieces() {
     }
 }
 
-SDL_FPoint GameManager::getBestMove(bool isMaximizingPlayer) {
-    SDL_FPoint oldPos, newPos, tempOldPos, tempNewPos;
+SDL_Point GameManager::getBestMove(bool isMaximizingPlayer) {
+    SDL_Point oldPos, newPos, tempOldPos, tempNewPos;
     int minMaxTemp = 10000, minMax = 10000;
     int currentPossibleMoveCount, pieceToMoveIdx;
-    SDL_FPoint possibleMoveTemp[32];
+    SDL_Point possibleMoveTemp[32];
 
     for (int i = 0; i < 16; i++) {
         if (pieces[i].rect.x == -100 && pieces[i].rect.y == -100) continue;
@@ -304,7 +304,7 @@ SDL_FPoint GameManager::getBestMove(bool isMaximizingPlayer) {
             possibleMoveTemp[k] = possibleMoves[k];
         }
 
-        tempOldPos = {static_cast<float>(pieces[i].rect.x), static_cast<float>(pieces[i].rect.y)};
+        tempOldPos = {pieces[i].rect.x, pieces[i].rect.y};
         minMaxTemp = 10000;
 
         for (int j = 0; j < currentPossibleMoveCount; j++) {
@@ -451,9 +451,9 @@ void GameManager::findRookMoves(int pieceIdx, int x, int y, int grid[9][9]) {
 }
 
 void GameManager::calculatePossibleMoves(int pieceIdx) {
-    SDL_FPoint currentPos = {static_cast<float>(pieces[pieceIdx].rect.x), static_cast<float>(pieces[pieceIdx].rect.y)};
-    int x = static_cast<int>((currentPos.x - OFFSET.x) / TILE_SIZE);
-    int y = static_cast<int>((currentPos.y - OFFSET.y) / TILE_SIZE);
+    SDL_Point currentPos = {pieces[pieceIdx].rect.x, pieces[pieceIdx].rect.y};
+    int x = (currentPos.x - OFFSET.x) / TILE_SIZE;
+    int y = (currentPos.y - OFFSET.y) / TILE_SIZE;
 
     int grid[9][9];
     for (int i = 0; i < 8; i++) {
@@ -464,8 +464,8 @@ void GameManager::calculatePossibleMoves(int pieceIdx) {
 
     for (int j = 0; j < 32; j++) {
         if (pieces[j].rect.x != -100 && pieces[j].rect.y != -100) {
-            int pieceGridX = static_cast<int>((pieces[j].rect.x - OFFSET.x) / TILE_SIZE);
-            int pieceGridY = static_cast<int>((pieces[j].rect.y - OFFSET.y) / TILE_SIZE);
+            int pieceGridX = (pieces[j].rect.x - OFFSET.x) / TILE_SIZE;
+            int pieceGridY = (pieces[j].rect.y - OFFSET.y) / TILE_SIZE;
             if (pieceGridX >= 0 && pieceGridX < 8 && pieceGridY >= 0 && pieceGridY < 8) {
                     grid[pieceGridX][pieceGridY] = pieces[j].index;
             }
@@ -488,7 +488,7 @@ void GameManager::playGame() {
     createPieces();
 
     bool isPlayerTurn = true;
-    SDL_FPoint oldClickPos;
+    SDL_Point oldClickPos;
     int clickedPieceIdx = -1;
     int clickCount = 0;
 
@@ -517,7 +517,7 @@ void GameManager::playGame() {
                             if (SDL_HasIntersection(&pieces[i].rect, &mouseRect)) {
                                 pieceSelected = true;
                                 clickedPieceIdx = i;
-                                oldClickPos = {static_cast<float>(pieces[clickedPieceIdx].rect.x), static_cast<float>(pieces[clickedPieceIdx].rect.y)};
+                                oldClickPos = {pieces[clickedPieceIdx].rect.x, pieces[clickedPieceIdx].rect.y};
                                 break;
                             }
                         }
@@ -527,13 +527,13 @@ void GameManager::playGame() {
                             calculatePossibleMoves(clickedPieceIdx);
                         }
                     } else if (clickCount == 2) {
-                        int destX = (mousePos.x - static_cast<int>(OFFSET.x)) / TILE_SIZE;
-                        int destY = (mousePos.y - static_cast<int>(OFFSET.y)) / TILE_SIZE;
-                        SDL_FPoint newMovePos = {static_cast<float>(destX * TILE_SIZE) + OFFSET.x, static_cast<float>(destY * TILE_SIZE) + OFFSET.y};
+                        int destX = (mousePos.x - OFFSET.x) / TILE_SIZE;
+                        int destY = (mousePos.y - OFFSET.y) / TILE_SIZE;
+                        SDL_Point newMovePos = {destX * TILE_SIZE + OFFSET.x, destY * TILE_SIZE + OFFSET.y};
 
                         bool validMove = false;
                         for (int i = 0; i < possibleMoveCount; i++) {
-                            if (std::abs(possibleMoves[i].x - newMovePos.x) < 0.1f && std::abs(possibleMoves[i].y - newMovePos.y) < 0.1f) {
+                            if (possibleMoves[i].x == newMovePos.x && possibleMoves[i].y == newMovePos.y) {
                                 validMove = true;
                                 break;
                             }
@@ -552,10 +552,10 @@ void GameManager::playGame() {
         }
 
         if (!isPlayerTurn) {
-            SDL_FPoint newAiPos = getBestMove(isPlayerTurn);
+            SDL_Point newAiPos = getBestMove(isPlayerTurn);
             int aiPieceIdx = pieceIndexStack.top();
             pieceIndexStack.pop();
-            SDL_FPoint oldAiPos = positionStack.top();
+            SDL_Point oldAiPos = positionStack.top();
             positionStack.pop();
             
             movePiece(aiPieceIdx, oldAiPos, newAiPos);
@@ -572,7 +572,7 @@ void GameManager::playGame() {
 
         if (clickCount == 1 && clickedPieceIdx != -1) {
             for (int i = 0; i < possibleMoveCount; i++) {
-                SDL_Rect destRect = {static_cast<int>(possibleMoves[i].x), static_cast<int>(possibleMoves[i].y), TILE_SIZE, TILE_SIZE};
+                SDL_Rect destRect = {possibleMoves[i].x, possibleMoves[i].y, TILE_SIZE, TILE_SIZE};
                 SDL_RenderCopy(renderer, positiveMoveTexture, NULL, &destRect);
             }
         }
