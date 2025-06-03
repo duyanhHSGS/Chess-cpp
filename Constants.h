@@ -29,11 +29,16 @@ enum class PlayerColor {
     Black
 };
 
+// Define FUTILITY_MARGIN for Futility Pruning
+// A small value, e.g., representing a pawn's value, to allow for small tactical gains
+const int FUTILITY_MARGIN = 10; // Represents 1 pawn unit, fo
+
 // Define which color the human player controls
 const PlayerColor HUMAN_PLAYER_COLOR = PlayerColor::White; // Human plays as White
 
 // Define the search depth for the Alpha-Beta pruning algorithm
 // Higher depth means stronger AI but more computation time
 const int AI_SEARCH_DEPTH = 5;
+const int AI_ENDGAME_SEARCH_DEPTH = 7;
 
 #endif // CONSTANTS_H

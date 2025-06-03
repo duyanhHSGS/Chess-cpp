@@ -4,7 +4,7 @@
 #include "ChessPiece.h"
 
 #include <algorithm>
-#include <SDL_log.h> // Include SDL_log.h for SDL_Log
+#include <SDL_log.h>
 
 GameManager::GameManager() :
     possibleMoveCount(0),
@@ -23,6 +23,8 @@ GameManager::GameManager() :
     figuresTexture = nullptr;
     positiveMoveTexture = nullptr;
     redTexture = nullptr;
+    blueTexture = nullptr;
+    ai = std::make_unique<ChessAI>();
 }
 
 GameManager::~GameManager() {
@@ -78,14 +80,21 @@ void GameManager::initializeSDL() {
 
     positiveMoveTexture = IMG_LoadTexture(renderer, "img/no.png");
     if (!positiveMoveTexture) {
-        SDL_Log("Failed to load no.png! IMG_Error: %s", IMG_GetError());
+        SDL_Log("Failed to load no.png! IMG_Error: %s", SDL_GetError());
         cleanUpSDL();
         exit(1);
     }
 
     redTexture = IMG_LoadTexture(renderer, "img/red.png");
     if (!redTexture) {
-        SDL_Log("Failed to load red.png! IMG_Error: %s", IMG_GetError());
+        SDL_Log("Failed to load red.png! IMG_Error: %s", SDL_GetError());
+        cleanUpSDL();
+        exit(1);
+    }
+
+    blueTexture = IMG_LoadTexture(renderer, "img/blue.png");
+    if (!blueTexture) {
+        SDL_Log("Failed to load blue.png! IMG_Error: %s", SDL_GetError());
         cleanUpSDL();
         exit(1);
     }
@@ -96,6 +105,7 @@ void GameManager::cleanUpSDL() {
     if (boardTexture) SDL_DestroyTexture(boardTexture);
     if (figuresTexture) SDL_DestroyTexture(figuresTexture);
     if (redTexture) SDL_DestroyTexture(redTexture);
+    if (blueTexture) SDL_DestroyTexture(blueTexture);
     if (renderer) SDL_DestroyRenderer(renderer);
     if (window) SDL_DestroyWindow(window);
     IMG_Quit();
@@ -139,37 +149,67 @@ void GameManager::createPieces() {
 }
 
 void GameManager::movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) {
+    GameStateSnapshot currentSnapshot = {
+        enPassantTargetSquare,
+        enPassantPawnIndex,
+        whiteKingMoved,
+        blackKingMoved,
+        whiteRookKingsideMoved,
+        whiteRookQueensideMoved,
+        blackRookKingsideMoved,
+        blackRookQueensideMoved,
+        -1,
+        {-100, -100},
+        -1,
+        0,
+        -1,
+        {-100, -100},
+        {-100, -100}
+    };
+    gameStateSnapshots.push(currentSnapshot);
+
     int oldX_grid = (oldPos.x - OFFSET.x) / TILE_SIZE;
     int oldY_grid = (oldPos.y - OFFSET.y) / TILE_SIZE;
     int newX_grid = (newPos.x - OFFSET.x) / TILE_SIZE;
     int newY_grid = (newPos.y - OFFSET.y) / TILE_SIZE;
 
-    positionStack.push(enPassantTargetSquare);
-    pieceIndexStack.push(enPassantPawnIndex);
-    pieceIndexStack.push(400);
+    positionStack.push(oldPos);
+    positionStack.push(newPos);
+    pieceIndexStack.push(pieceIdx);
 
-    enPassantTargetSquare = {-1, -1};
-    enPassantPawnIndex = -1;
+    int capturedPieceActualIdx = -1;
+    SDL_Point capturedPieceActualOldPos = {-100, -100};
 
     if (std::abs(pieces[pieceIdx].index) == 6 &&
         std::abs(newX_grid - oldX_grid) == 1 &&
         std::abs(newY_grid - oldY_grid) == 1 &&
-        (newPos.x == (enPassantTargetSquare.x * TILE_SIZE + OFFSET.x) && newPos.y == (enPassantTargetSquare.y * TILE_SIZE + OFFSET.y)) &&
-        pieces[pieceIdx].index * pieces[enPassantPawnIndex].index < 0)
+        (newPos.x == (currentSnapshot.enPassantTargetSquare.x * TILE_SIZE + OFFSET.x) && newPos.y == (currentSnapshot.enPassantTargetSquare.y * TILE_SIZE + OFFSET.y)) &&
+        currentSnapshot.enPassantPawnIndex != -1 &&
+        pieces[pieceIdx].index * pieces[currentSnapshot.enPassantPawnIndex].index < 0)
     {
-        SDL_Point capturedPawnOldPos = {pieces[enPassantPawnIndex].rect.x, pieces[enPassantPawnIndex].rect.y};
-        pieces[enPassantPawnIndex].rect.x = -100;
-        pieces[enPassantPawnIndex].rect.y = -100;
-
-        positionStack.push(capturedPawnOldPos);
-        positionStack.push({-100, -100});
-        pieceIndexStack.push(enPassantPawnIndex);
-        pieceIndexStack.push(300);
+        capturedPieceActualIdx = currentSnapshot.enPassantPawnIndex;
+        capturedPieceActualOldPos = {pieces[capturedPieceActualIdx].rect.x, pieces[capturedPieceActualIdx].rect.y};
+        pieces[capturedPieceActualIdx].rect.x = -100;
+        pieces[capturedPieceActualIdx].rect.y = -100;
     }
+    else {
+        SDL_Rect newPosRect = {newPos.x, newPos.y, TILE_SIZE, TILE_SIZE};
+        for (int i = 0; i < 32; ++i) {
+            if (SDL_HasIntersection(&pieces[i].rect, &newPosRect) && i != pieceIdx) {
+                if ((pieces[i].index > 0 && pieces[pieceIdx].index < 0) ||
+                    (pieces[i].index < 0 && pieces[pieceIdx].index > 0)) {
+                    capturedPieceActualIdx = i;
+                    capturedPieceActualOldPos = {pieces[i].rect.x, pieces[i].rect.y};
+                    pieces[i].rect.x = -100;
+                    pieces[i].rect.y = -100;
+                    break;
+                }
+            }
+        }
+    }
+    positionStack.push(capturedPieceActualOldPos);
+    pieceIndexStack.push(capturedPieceActualIdx);
 
-    positionStack.push(oldPos);
-    positionStack.push(newPos);
-    pieceIndexStack.push(pieceIdx);
 
     if (std::abs(pieces[pieceIdx].index) == 5 && std::abs(newX_grid - oldX_grid) == 2) {
         int rookIdx = -1;
@@ -220,14 +260,34 @@ void GameManager::movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) {
         }
 
         if (rookIdx != -1) {
-            positionStack.push(rookOldPos);
-            positionStack.push(rookNewPos);
-            pieceIndexStack.push(rookIdx);
             pieces[rookIdx].rect.x = rookNewPos.x;
             pieces[rookIdx].rect.y = rookNewPos.y;
-            pieceIndexStack.push(200);
+            gameStateSnapshots.top().castlingRookIdx = rookIdx;
+            gameStateSnapshots.top().castlingRookOldPos = rookOldPos;
+            gameStateSnapshots.top().castlingRookNewPos = rookNewPos;
         }
     }
+
+
+    int promotedPawnActualIdx = -1;
+    int originalPawnActualIndexValue = 0;
+    if (newY_grid == 0 && pieces[pieceIdx].index == 6) {
+        promotedPawnActualIdx = pieceIdx;
+        originalPawnActualIndexValue = pieces[pieceIdx].index;
+        pieces[pieceIdx].index = 4;
+        pieces[pieceIdx].cost = 90;
+    } else if (newY_grid == 7 && pieces[pieceIdx].index == -6) {
+        promotedPawnActualIdx = pieceIdx;
+        originalPawnActualIndexValue = pieces[pieceIdx].index;
+        pieces[pieceIdx].index = -4;
+        pieces[pieceIdx].cost = -90;
+    }
+    gameStateSnapshots.top().promotedPawnIdx = promotedPawnActualIdx;
+    gameStateSnapshots.top().originalPawnIndexValue = originalPawnActualIndexValue;
+
+
+    pieces[pieceIdx].rect.x = newPos.x;
+    pieces[pieceIdx].rect.y = newPos.y;
 
     if (pieces[pieceIdx].index == 5) whiteKingMoved = true;
     else if (pieces[pieceIdx].index == -5) blackKingMoved = true;
@@ -240,99 +300,66 @@ void GameManager::movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) {
         else if (oldX_grid == 7 && oldY_grid == 0) blackRookKingsideMoved = true;
     }
 
-    if (newY_grid == 0 && pieces[pieceIdx].index == 6) {
-        pieceIndexStack.push(100);
-        pieces[pieceIdx].index = 4;
-        pieces[pieceIdx].cost = 90;
-    }
-    if (newY_grid == 7 && pieces[pieceIdx].index == -6) {
-        pieceIndexStack.push(-100);
-        pieces[pieceIdx].index = -4;
-        pieces[pieceIdx].cost = -90;
-    }
-
-    SDL_Rect newPosRect = {newPos.x, newPos.y, TILE_SIZE, TILE_SIZE};
-    for (int i = 0; i < 32; ++i) {
-        if (SDL_HasIntersection(&pieces[i].rect, &newPosRect) && i != pieceIdx) {
-            SDL_Point capturedOldPos = {pieces[i].rect.x, pieces[i].rect.y};
-            pieces[i].rect.x = -100;
-            pieces[i].rect.y = -100;
-
-            positionStack.push(capturedOldPos);
-            positionStack.push({-100, -100});
-            pieceIndexStack.push(i);
-            break;
-        }
-    }
-
-    pieces[pieceIdx].rect.x = newPos.x;
-    pieces[pieceIdx].rect.y = newPos.y;
-
     if (std::abs(pieces[pieceIdx].index) == 6 && std::abs(newY_grid - oldY_grid) == 2) {
         enPassantTargetSquare = {newX_grid, (newY_grid + oldY_grid) / 2};
         enPassantPawnIndex = pieceIdx;
+    } else {
+        enPassantTargetSquare = {-1, -1};
+        enPassantPawnIndex = -1;
     }
 }
 
 void GameManager::undoLastMove() {
-    if (pieceIndexStack.empty()) {
+    if (gameStateSnapshots.empty()) {
         SDL_Log("No moves to undo.");
         return;
     }
 
-    int pieceIdx = pieceIndexStack.top();
-    pieceIndexStack.pop();
+    GameStateSnapshot prevState = gameStateSnapshots.top();
+    gameStateSnapshots.pop();
 
-    if (pieceIdx == 400) {
-        enPassantPawnIndex = pieceIndexStack.top(); pieceIndexStack.pop();
-        enPassantTargetSquare = positionStack.top(); positionStack.pop();
-        undoLastMove();
+    enPassantTargetSquare = prevState.enPassantTargetSquare;
+    enPassantPawnIndex = prevState.enPassantPawnIndex;
+    whiteKingMoved = prevState.whiteKingMoved;
+    blackKingMoved = prevState.blackKingMoved;
+    whiteRookKingsideMoved = prevState.whiteRookKingsideMoved;
+    whiteRookQueensideMoved = prevState.whiteRookQueensideMoved;
+    blackRookKingsideMoved = prevState.blackRookKingsideMoved;
+    blackRookQueensideMoved = prevState.blackRookQueensideMoved;
+
+    if (pieceIndexStack.empty()) {
+        SDL_Log("Error: Piece stack empty during undo after state restoration.");
         return;
     }
+    int movedPieceIdx = pieceIndexStack.top(); pieceIndexStack.pop();
+    SDL_Point movedPieceNewPos = positionStack.top(); positionStack.pop();
+    SDL_Point movedPieceOldPos = positionStack.top(); positionStack.pop();
+    pieces[movedPieceIdx].rect.x = movedPieceOldPos.x;
+    pieces[movedPieceIdx].rect.y = movedPieceOldPos.y;
 
-    if (pieceIdx == 200) {
-        int rookMovedIdx = pieceIndexStack.top(); pieceIndexStack.pop();
-        SDL_Point rookNewPos = positionStack.top(); positionStack.pop();
-        SDL_Point rookOldPos = positionStack.top(); positionStack.pop();
-        pieces[rookMovedIdx].rect.x = rookOldPos.x;
-        pieces[rookMovedIdx].rect.y = rookOldPos.y;
-
-        undoLastMove();
-        return;
+    int capturedPieceIdx = pieceIndexStack.top(); pieceIndexStack.pop();
+    SDL_Point capturedPieceOldPos = positionStack.top(); positionStack.pop();
+    if (capturedPieceIdx != -1) {
+        pieces[capturedPieceIdx].rect.x = capturedPieceOldPos.x;
+        pieces[capturedPieceIdx].rect.y = capturedPieceOldPos.y;
     }
 
-    if (pieceIdx == 300) {
-        int capturedPawnIdx = pieceIndexStack.top(); pieceIndexStack.pop();
-        SDL_Point capturedPawnNewPos = positionStack.top(); positionStack.pop();
-        SDL_Point capturedPawnOldPos = positionStack.top(); positionStack.pop();
-        pieces[capturedPawnIdx].rect.x = capturedPawnOldPos.x;
-        pieces[capturedPawnIdx].rect.y = capturedPawnOldPos.y;
-        undoLastMove();
-        return;
+    if (prevState.castlingRookIdx != -1) {
+        pieces[prevState.castlingRookIdx].rect.x = prevState.castlingRookOldPos.x;
+        pieces[prevState.castlingRookIdx].rect.y = prevState.castlingRookOldPos.y;
     }
 
-    SDL_Point newPos = positionStack.top();
-    positionStack.pop();
-    SDL_Point oldPos = positionStack.top();
-    positionStack.pop();
-
-    if (pieceIdx == 100) {
-        pieceIdx = pieceIndexStack.top();
-        pieceIndexStack.pop();
-        pieces[pieceIdx].index = 6;
-        pieces[pieceIdx].cost = 10;
-    } else if (pieceIdx == -100) {
-        pieceIdx = pieceIndexStack.top();
-        pieceIndexStack.pop();
-        pieces[pieceIdx].index = -6;
-        pieces[pieceIdx].cost = -10;
-    }
-
-    pieces[pieceIdx].rect.x = oldPos.x;
-    pieces[pieceIdx].rect.y = oldPos.y;
-
-    if (newPos.x == -100 && newPos.y == -100) {
-        undoLastMove();
+    if (prevState.promotedPawnIdx != -1) {
+        pieces[prevState.promotedPawnIdx].index = prevState.originalPawnIndexValue;
+        int pieceType = std::abs(pieces[prevState.promotedPawnIdx].index);
+        int pieceValue = 0;
+        if (pieceType == 1) pieceValue = 50;
+        else if (pieceType == 2) pieceValue = 30;
+        else if (pieceType == 3) pieceValue = 30;
+        else if (pieceType == 4) pieceValue = 90;
+        else if (pieceType == 5) pieceValue = 900;
+        else if (pieceType == 6) pieceValue = 10;
+        pieces[prevState.promotedPawnIdx].cost = pieces[prevState.promotedPawnIdx].index / pieceType * pieceValue;
     }
 }
 
@@ -537,21 +564,29 @@ void GameManager::calculatePossibleMoves(int pieceIdx) {
 }
 
 bool GameManager::checkAndAddMove(int pieceIdx, int newX, int newY, int pieceColor) {
+    GameStateSnapshot originalSnapshot = {
+        enPassantTargetSquare,
+        enPassantPawnIndex,
+        whiteKingMoved,
+        blackKingMoved,
+        whiteRookKingsideMoved,
+        whiteRookQueensideMoved,
+        blackRookKingsideMoved,
+        blackRookQueensideMoved,
+        -1,
+        {-100, -100},
+        -1,
+        0,
+        -1,
+        {-100, -100},
+        {-100, -100}
+    };
+
     SDL_Point originalPiecePos = {pieces[pieceIdx].rect.x, pieces[pieceIdx].rect.y};
     SDL_Rect tempNewPosRect = {newX * TILE_SIZE + OFFSET.x, newY * TILE_SIZE + OFFSET.y, TILE_SIZE, TILE_SIZE};
 
-    SDL_Point originalTargetPiecePos = {-100, -100};
-    int originalTargetPieceIdx = -1;
-
-    for (int p = 0; p < 32; ++p) {
-        if (SDL_HasIntersection(&pieces[p].rect, &tempNewPosRect) && p != pieceIdx) {
-            originalTargetPiecePos = {pieces[p].rect.x, pieces[p].rect.y};
-            originalTargetPieceIdx = p;
-            pieces[p].rect.x = -100;
-            pieces[p].rect.y = -100;
-            break;
-        }
-    }
+    int capturedSimIdx = -1;
+    SDL_Point capturedSimOldPos = {-100, -100};
 
     int oldX_grid = (originalPiecePos.x - OFFSET.x) / TILE_SIZE;
     int oldY_grid = (originalPiecePos.y - OFFSET.y) / TILE_SIZE;
@@ -561,12 +596,54 @@ bool GameManager::checkAndAddMove(int pieceIdx, int newX, int newY, int pieceCol
         std::abs(newX - oldX_grid) == 1 &&
         std::abs(newY - oldY_grid) == 1 &&
         newX == enPassantTargetSquare.x && newY == enPassantTargetSquare.y &&
-        enPassantPawnIndex != -1)
+        enPassantPawnIndex != -1 &&
+        pieces[pieceIdx].index * pieces[enPassantPawnIndex].index < 0)
     {
-        originalTargetPieceIdx = enPassantPawnIndex;
-        originalTargetPiecePos = {pieces[originalTargetPieceIdx].rect.x, pieces[originalTargetPieceIdx].rect.y};
-        pieces[originalTargetPieceIdx].rect.x = -100;
-        pieces[originalTargetPieceIdx].rect.y = -100;
+        capturedSimIdx = enPassantPawnIndex;
+        capturedSimOldPos = {pieces[capturedSimIdx].rect.x, pieces[capturedSimIdx].rect.y};
+        pieces[capturedSimIdx].rect.x = -100;
+        pieces[capturedSimIdx].rect.y = -100;
+    }
+    else {
+        for (int p = 0; p < 32; ++p) {
+            if (SDL_HasIntersection(&pieces[p].rect, &tempNewPosRect) && p != pieceIdx) {
+                if ((pieces[p].index > 0 && pieceColor < 0) || (pieces[p].index < 0 && pieceColor > 0)) {
+                    capturedSimIdx = p;
+                    capturedSimOldPos = {pieces[capturedSimIdx].rect.x, pieces[capturedSimIdx].rect.y};
+                    pieces[capturedSimIdx].rect.x = -100;
+                    pieces[capturedSimIdx].rect.y = -100;
+                    break;
+                }
+            }
+        }
+    }
+
+    int simulatedRookIdx = -1;
+    SDL_Point simulatedRookOldPos = {-100, -100};
+    SDL_Point simulatedRookNewPos = {-100, -100};
+
+    if (std::abs(pieces[pieceIdx].index) == 5 && std::abs(newX - oldX_grid) == 2) {
+        if (newX == 6) {
+            simulatedRookIdx = (pieceColor == 1) ? 23 : 7;
+            simulatedRookOldPos = {(pieceColor == 1 ? 7 : 7) * TILE_SIZE + OFFSET.x, (pieceColor == 1 ? 7 : 0) * TILE_SIZE + OFFSET.y};
+            simulatedRookNewPos = {(pieceColor == 1 ? 5 : 5) * TILE_SIZE + OFFSET.x, (pieceColor == 1 ? 7 : 0) * TILE_SIZE + OFFSET.y};
+        } else if (newX == 2) {
+            simulatedRookIdx = (pieceColor == 1) ? 16 : 0;
+            simulatedRookOldPos = {(pieceColor == 1 ? 0 : 0) * TILE_SIZE + OFFSET.x, (pieceColor == 1 ? 7 : 0) * TILE_SIZE + OFFSET.y};
+            simulatedRookNewPos = {(pieceColor == 1 ? 3 : 3) * TILE_SIZE + OFFSET.x, (pieceColor == 1 ? 7 : 0) * TILE_SIZE + OFFSET.y};
+        }
+        if (simulatedRookIdx != -1) {
+            for(int i = 0; i < 32; ++i) {
+                if(pieces[i].index == pieceColor * 1 && pieces[i].rect.x == simulatedRookOldPos.x && pieces[i].rect.y == simulatedRookOldPos.y) {
+                    simulatedRookIdx = i;
+                    break;
+                }
+            }
+            if(simulatedRookIdx != -1) {
+                pieces[simulatedRookIdx].rect.x = simulatedRookNewPos.x;
+                pieces[simulatedRookIdx].rect.y = simulatedRookNewPos.y;
+            }
+        }
     }
 
     pieces[pieceIdx].rect.x = tempNewPosRect.x;
@@ -576,12 +653,27 @@ bool GameManager::checkAndAddMove(int pieceIdx, int newX, int newY, int pieceCol
 
     pieces[pieceIdx].rect.x = originalPiecePos.x;
     pieces[pieceIdx].rect.y = originalPiecePos.y;
-    if (originalTargetPieceIdx != -1) {
-        pieces[originalTargetPieceIdx].rect.x = originalTargetPiecePos.x;
-        pieces[originalTargetPieceIdx].rect.y = originalTargetPiecePos.y;
+    if (capturedSimIdx != -1) {
+        pieces[capturedSimIdx].rect.x = capturedSimOldPos.x;
+        pieces[capturedSimIdx].rect.y = capturedSimOldPos.y;
     }
+    if (simulatedRookIdx != -1 && simulatedRookIdx != -1) {
+        pieces[simulatedRookIdx].rect.x = simulatedRookOldPos.x;
+        pieces[simulatedRookIdx].rect.y = simulatedRookOldPos.y;
+    }
+
+    enPassantTargetSquare = originalSnapshot.enPassantTargetSquare;
+    enPassantPawnIndex = originalSnapshot.enPassantPawnIndex;
+    whiteKingMoved = originalSnapshot.whiteKingMoved;
+    blackKingMoved = originalSnapshot.blackKingMoved;
+    whiteRookKingsideMoved = originalSnapshot.whiteRookKingsideMoved;
+    whiteRookQueensideMoved = originalSnapshot.whiteRookQueensideMoved;
+    blackRookKingsideMoved = originalSnapshot.blackRookKingsideMoved;
+    blackRookQueensideMoved = originalSnapshot.blackRookQueensideMoved;
+
     return isLegal;
 }
+
 
 void GameManager::findRookMoves(int pieceIdx, int x, int y, int grid[9][9]) {
     int pieceColor = grid[y][x] > 0 ? 1 : -1;
@@ -783,21 +875,24 @@ void GameManager::findPawnMoves(int pieceIdx, int x, int y, int grid[9][9]) {
             SDL_Point originalPiecePos = {pieces[pieceIdx].rect.x, pieces[pieceIdx].rect.y};
             SDL_Rect tempNewPosRect = {(x - 1) * TILE_SIZE + OFFSET.x, (y + direction) * TILE_SIZE + OFFSET.y, TILE_SIZE, TILE_SIZE};
 
-            SDL_Point originalCapturedPawnPos = {pieces[enPassantPawnIndex].rect.x, pieces[enPassantPawnIndex].rect.y};
-            pieces[enPassantPawnIndex].rect.x = -100;
-            pieces[enPassantPawnIndex].rect.y = -100;
+            int capturedSimIdx = enPassantPawnIndex;
+            SDL_Point capturedSimOldPos = {pieces[capturedSimIdx].rect.x, pieces[capturedSimIdx].rect.y};
+            pieces[capturedSimIdx].rect.x = -100;
+            pieces[capturedSimIdx].rect.y = -100;
 
             pieces[pieceIdx].rect.x = tempNewPosRect.x;
             pieces[pieceIdx].rect.y = tempNewPosRect.y;
 
-            if (!isKingInCheck(pieceColor)) {
-                addPossibleMove(x - 1, y + direction);
-            }
+            bool isLegal = !isKingInCheck(pieceColor);
 
             pieces[pieceIdx].rect.x = originalPiecePos.x;
             pieces[pieceIdx].rect.y = originalPiecePos.y;
-            pieces[enPassantPawnIndex].rect.x = originalCapturedPawnPos.x;
-            pieces[enPassantPawnIndex].rect.y = originalCapturedPawnPos.y;
+            pieces[capturedSimIdx].rect.x = capturedSimOldPos.x;
+            pieces[capturedSimIdx].rect.y = capturedSimOldPos.y;
+
+            if (isLegal) {
+                addPossibleMove(x - 1, y + direction);
+            }
         }
         if (x + 1 < 8 &&
             (enPassantTargetSquare.x == x + 1 && enPassantTargetSquare.y == y + direction) &&
@@ -807,21 +902,24 @@ void GameManager::findPawnMoves(int pieceIdx, int x, int y, int grid[9][9]) {
             SDL_Point originalPiecePos = {pieces[pieceIdx].rect.x, pieces[pieceIdx].rect.y};
             SDL_Rect tempNewPosRect = {(x + 1) * TILE_SIZE + OFFSET.x, (y + direction) * TILE_SIZE + OFFSET.y, TILE_SIZE, TILE_SIZE};
 
-            SDL_Point originalCapturedPawnPos = {pieces[enPassantPawnIndex].rect.x, pieces[enPassantPawnIndex].rect.y};
-            pieces[enPassantPawnIndex].rect.x = -100;
-            pieces[enPassantPawnIndex].rect.y = -100;
+            int capturedSimIdx = enPassantPawnIndex;
+            SDL_Point capturedSimOldPos = {pieces[capturedSimIdx].rect.x, pieces[capturedSimIdx].rect.y};
+            pieces[capturedSimIdx].rect.x = -100;
+            pieces[capturedSimIdx].rect.y = -100;
 
             pieces[pieceIdx].rect.x = tempNewPosRect.x;
             pieces[pieceIdx].rect.y = tempNewPosRect.y;
 
-            if (!isKingInCheck(pieceColor)) {
-                addPossibleMove(x + 1, y + direction);
-            }
+            bool isLegal = !isKingInCheck(pieceColor);
 
             pieces[pieceIdx].rect.x = originalPiecePos.x;
             pieces[pieceIdx].rect.y = originalPiecePos.y;
-            pieces[enPassantPawnIndex].rect.x = originalCapturedPawnPos.x;
-            pieces[enPassantPawnIndex].rect.y = originalCapturedPawnPos.y;
+            pieces[capturedSimIdx].rect.x = capturedSimOldPos.x;
+            pieces[capturedSimIdx].rect.y = capturedSimOldPos.y;
+
+            if (isLegal) {
+                addPossibleMove(x + 1, y + direction);
+            }
         }
     }
 }
@@ -842,12 +940,7 @@ void GameManager::playGame() {
     initializeSDL();
     createPieces();
 
-    // Human controls White, AI controls Black
     PlayerColor currentPlayerTurn = PlayerColor::White;
-
-    SDL_Point oldClickPos;
-    int clickedPieceIdx = -1;
-    int clickCount = 0;
 
     SDL_Event e;
     bool quit = false;
@@ -860,40 +953,68 @@ void GameManager::playGame() {
             if (e.type == SDL_KEYDOWN) {
                 if (e.key.keysym.sym == SDLK_BACKSPACE) {
                     undoLastMove();
+                    aiLastMovedFrom = {-1, -1};
+                    aiLastMovedTo = {-1, -1};
                     currentPlayerTurn = (currentPlayerTurn == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
-                    clickCount = 0;
-                    clickedPieceIdx = -1;
+                    selectedPieceIdx = -1;
+                    isDragging = false;
+                    hoveredPieceIdx = -1;
                     possibleMoveCount = 0;
+                }
+            }
+            if (e.type == SDL_MOUSEMOTION) {
+                if (isDragging && selectedPieceIdx != -1) {
+                    pieces[selectedPieceIdx].rect.x = e.motion.x - dragOffset.x;
+                    pieces[selectedPieceIdx].rect.y = e.motion.y - dragOffset.y;
+                } else if (selectedPieceIdx == -1) {
+                    SDL_Point mousePos = {e.motion.x, e.motion.y};
+                    int currentHovered = -1;
+                    int startIdx = (currentPlayerTurn == PlayerColor::White) ? 16 : 0;
+                    int endIdx = (currentPlayerTurn == PlayerColor::White) ? 32 : 16;
+
+                    for (int i = startIdx; i < endIdx; ++i) {
+                        if (pieces[i].rect.x != -100 || pieces[i].rect.y != -100) {
+                            SDL_Rect mouseRect = {mousePos.x, mousePos.y, 1, 1};
+                            if (SDL_HasIntersection(&pieces[i].rect, &mouseRect)) {
+                                currentHovered = i;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (currentHovered != hoveredPieceIdx) {
+                        hoveredPieceIdx = currentHovered;
+                        if (hoveredPieceIdx != -1) {
+                            calculatePossibleMoves(hoveredPieceIdx);
+                        } else {
+                            possibleMoveCount = 0;
+                        }
+                    }
                 }
             }
             if (e.type == SDL_MOUSEBUTTONDOWN) {
                 if (e.button.button == SDL_BUTTON_LEFT) {
                     SDL_Point mousePos = {e.button.x, e.button.y};
-                    clickCount++;
 
-                    if (clickCount == 1) {
-                        bool pieceSelected = false;
+                    if (selectedPieceIdx == -1) {
                         int startIdx = (currentPlayerTurn == PlayerColor::White) ? 16 : 0;
                         int endIdx = (currentPlayerTurn == PlayerColor::White) ? 32 : 16;
 
                         for (int i = startIdx; i < endIdx; ++i) {
-                            if (pieces[i].rect.x != -100 || pieces[i].rect.y != -100)
-                            {
+                            if (pieces[i].rect.x != -100 || pieces[i].rect.y != -100) {
                                 SDL_Rect mouseRect = {mousePos.x, mousePos.y, 1, 1};
                                 if (SDL_HasIntersection(&pieces[i].rect, &mouseRect)) {
-                                    pieceSelected = true;
-                                    clickedPieceIdx = i;
-                                    oldClickPos = {pieces[clickedPieceIdx].rect.x, pieces[clickedPieceIdx].rect.y};
+                                    selectedPieceIdx = i;
+                                    selectedPieceOriginalPos = {pieces[selectedPieceIdx].rect.x, pieces[selectedPieceIdx].rect.y};
+                                    dragOffset = {mousePos.x - pieces[selectedPieceIdx].rect.x, mousePos.y - pieces[selectedPieceIdx].rect.y};
+                                    isDragging = true;
+                                    calculatePossibleMoves(selectedPieceIdx);
+                                    hoveredPieceIdx = -1;
                                     break;
                                 }
                             }
                         }
-                        if (!pieceSelected) {
-                            clickCount = 0;
-                        } else {
-                            calculatePossibleMoves(clickedPieceIdx);
-                        }
-                    } else if (clickCount == 2) {
+                    } else {
                         int destX = (mousePos.x - OFFSET.x) / TILE_SIZE;
                         int destY = (mousePos.y - OFFSET.y) / TILE_SIZE;
                         SDL_Point newMovePos = {destX * TILE_SIZE + OFFSET.x, destY * TILE_SIZE + OFFSET.y};
@@ -907,17 +1028,67 @@ void GameManager::playGame() {
                         }
 
                         if (validMove) {
-                            movePiece(clickedPieceIdx, oldClickPos, newMovePos);
-                            // Get and print evaluation after human move
+                            movePiece(selectedPieceIdx, selectedPieceOriginalPos, newMovePos);
+                            aiLastMovedFrom = {-1, -1};
+                            aiLastMovedTo = {-1, -1};
+
                             int currentEvaluation = ai->getEvaluation(this);
                             SDL_Log("After %s make a move, the current evaluation point is %+d",
                                     (currentPlayerTurn == PlayerColor::White ? "White" : "Black"), currentEvaluation);
 
                             currentPlayerTurn = (currentPlayerTurn == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
                         }
+                        selectedPieceIdx = -1;
+                        isDragging = false;
                         possibleMoveCount = 0;
-                        clickCount = 0;
-                        clickedPieceIdx = -1;
+                        hoveredPieceIdx = -1;
+                    }
+                }
+            }
+            if (e.type == SDL_MOUSEBUTTONUP) {
+                if (e.button.button == SDL_BUTTON_LEFT && isDragging) {
+                    SDL_Point mouseReleasePos = {e.button.x, e.button.y};
+                    int destX = (mouseReleasePos.x - OFFSET.x) / TILE_SIZE;
+                    int destY = (mouseReleasePos.y - OFFSET.y) / TILE_SIZE;
+                    SDL_Point newMovePos = {destX * TILE_SIZE + OFFSET.x, destY * TILE_SIZE + OFFSET.y};
+
+                    bool validMove = false;
+                    for (int i = 0; i < possibleMoveCount; ++i) {
+                        if (possibleMoves[i].x == newMovePos.x && possibleMoves[i].y == newMovePos.y) {
+                            validMove = true;
+                            break;
+                        }
+                    }
+
+                    if (validMove) {
+                        movePiece(selectedPieceIdx, selectedPieceOriginalPos, newMovePos);
+                        aiLastMovedFrom = {-1, -1};
+                        aiLastMovedTo = {-1, -1};
+
+                        int currentEvaluation = ai->getEvaluation(this);
+                        SDL_Log("After %s make a move, the current evaluation point is %+d",
+                                (currentPlayerTurn == PlayerColor::White ? "White" : "Black"), currentEvaluation);
+
+                        currentPlayerTurn = (currentPlayerTurn == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
+                    } else {
+                        if (selectedPieceIdx != -1) {
+                            pieces[selectedPieceIdx].rect.x = selectedPieceOriginalPos.x;
+                            pieces[selectedPieceIdx].rect.y = selectedPieceOriginalPos.y;
+                        }
+                        if (selectedPieceOriginalPos.x == newMovePos.x && selectedPieceOriginalPos.y == newMovePos.y) {
+                            isDragging = false;
+                        } else {
+                            selectedPieceIdx = -1;
+                            isDragging = false;
+                            possibleMoveCount = 0;
+                            hoveredPieceIdx = -1;
+                        }
+                    }
+                    if (validMove) {
+                        selectedPieceIdx = -1;
+                        isDragging = false;
+                        possibleMoveCount = 0;
+                        hoveredPieceIdx = -1;
                     }
                 }
             }
@@ -926,10 +1097,6 @@ void GameManager::playGame() {
         PlayerColor AI_COLOR = (HUMAN_PLAYER_COLOR == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
         if (currentPlayerTurn == AI_COLOR) {
             SDL_Log("Thinking...");
-            for (int i = 1; i <= 4; ++i) { // Simulate thinking time with incremental logs
-                SDL_Log("Thinking... currently took %d", i);
-                SDL_Delay(1000); // Delay for 1 second
-            }
             SDL_Log("thinking completed, its the player's turn");
 
             bool isMaximizingPlayer = (AI_COLOR == PlayerColor::White);
@@ -942,15 +1109,18 @@ void GameManager::playGame() {
 
             movePiece(aiPieceIdx, oldAiPos, newAiPos);
             
-            // Get and print evaluation after AI move
+            aiLastMovedFrom = oldAiPos;
+            aiLastMovedTo = newAiPos;
+
             int currentEvaluation = ai->getEvaluation(this);
             SDL_Log("After %s make a move, the current evaluation point is %+d",
                     (AI_COLOR == PlayerColor::White ? "White" : "Black"), currentEvaluation);
 
             currentPlayerTurn = (HUMAN_PLAYER_COLOR == PlayerColor::White) ? PlayerColor::White : PlayerColor::Black;
 
-            clickCount = 0;
-            clickedPieceIdx = -1;
+            selectedPieceIdx = -1;
+            isDragging = false;
+            hoveredPieceIdx = -1;
             possibleMoveCount = 0;
         }
 
@@ -958,12 +1128,25 @@ void GameManager::playGame() {
 
         SDL_RenderCopy(renderer, boardTexture, NULL, NULL);
 
-        if (clickCount == 1 && clickedPieceIdx != -1) {
+        if (selectedPieceIdx != -1) {
             for (int i = 0; i < possibleMoveCount; ++i) {
                 SDL_Rect destRect = {possibleMoves[i].x, possibleMoves[i].y, TILE_SIZE, TILE_SIZE};
                 SDL_RenderCopy(renderer, positiveMoveTexture, NULL, &destRect);
             }
+        } else if (hoveredPieceIdx != -1) {
+             for (int i = 0; i < possibleMoveCount; ++i) {
+                SDL_Rect destRect = {possibleMoves[i].x, possibleMoves[i].y, TILE_SIZE, TILE_SIZE};
+                SDL_RenderCopy(renderer, positiveMoveTexture, NULL, &destRect);
+            }
         }
+
+        if (aiLastMovedFrom.x != -1 && aiLastMovedTo.x != -1) {
+            SDL_Rect fromRect = {aiLastMovedFrom.x, aiLastMovedFrom.y, TILE_SIZE, TILE_SIZE};
+            SDL_Rect toRect = {aiLastMovedTo.x, aiLastMovedTo.y, TILE_SIZE, TILE_SIZE};
+            SDL_RenderCopy(renderer, blueTexture, NULL, &fromRect);
+            SDL_RenderCopy(renderer, blueTexture, NULL, &toRect);
+        }
+
 
         int whiteKingColor = 1;
         if (isKingInCheck(whiteKingColor)) {
@@ -984,6 +1167,13 @@ void GameManager::playGame() {
         }
 
         renderPieces();
+
+        if (isDragging && selectedPieceIdx != -1) {
+            int xTex = std::abs(pieces[selectedPieceIdx].index) - 1;
+            int yTex = pieces[selectedPieceIdx].index > 0 ? 1 : 0;
+            SDL_Rect srcRect = {xTex * TILE_SIZE, yTex * TILE_SIZE, TILE_SIZE, TILE_SIZE};
+            SDL_RenderCopy(renderer, pieces[selectedPieceIdx].texture, &srcRect, &pieces[selectedPieceIdx].rect);
+        }
 
         SDL_RenderPresent(renderer);
     }

@@ -32,6 +32,25 @@ public:
     std::stack<SDL_Point> positionStack;
     std::stack<int> pieceIndexStack;
 
+    struct GameStateSnapshot {
+        SDL_Point enPassantTargetSquare;
+        int enPassantPawnIndex;
+        bool whiteKingMoved;
+        bool blackKingMoved;
+        bool whiteRookKingsideMoved;
+        bool whiteRookQueensideMoved;
+        bool blackRookKingsideMoved;
+        bool blackRookQueensideMoved;
+        int capturedPieceIdx;
+        SDL_Point capturedPieceOldPos;
+        int promotedPawnIdx;
+        int originalPawnIndexValue;
+        int castlingRookIdx;
+        SDL_Point castlingRookOldPos;
+        SDL_Point castlingRookNewPos;
+    };
+    std::stack<GameStateSnapshot> gameStateSnapshots;
+
     void movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos);
 
     void undoLastMove();
@@ -53,14 +72,18 @@ public:
     void getCurrentBoardGrid(int grid[9][9]) const;
 
     bool isSquareAttacked(int targetX, int targetY, int attackingColor) const;
+
     bool isKingInCheck(int kingColor) const;
+
 private:
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
+
     SDL_Texture* boardTexture = nullptr;
     SDL_Texture* figuresTexture = nullptr;
     SDL_Texture* positiveMoveTexture = nullptr;
     SDL_Texture* redTexture = nullptr;
+    SDL_Texture* blueTexture = nullptr;
 
     void renderPieces();
 
@@ -70,11 +93,24 @@ private:
     bool whiteRookQueensideMoved;
     bool blackRookKingsideMoved;
     bool blackRookQueensideMoved;
+
     SDL_Point enPassantTargetSquare;
     int enPassantPawnIndex;
+
     SDL_Point getKingPosition(int kingColor) const;
+
     SDL_Point getRookPosition(int rookColor, bool isKingside) const;
+
     bool checkAndAddMove(int pieceIdx, int newX, int newY, int pieceColor);
+
+    SDL_Point aiLastMovedFrom = {-1, -1};
+    SDL_Point aiLastMovedTo = {-1, -1};
+
+    int hoveredPieceIdx = -1;
+    int selectedPieceIdx = -1;
+    SDL_Point selectedPieceOriginalPos = {-1, -1};
+    bool isDragging = false;
+    SDL_Point dragOffset = {0, 0};
 };
 
 #endif // GAME_MANAGER_H
