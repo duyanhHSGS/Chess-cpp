@@ -1,3 +1,4 @@
+// GameManager.cpp
 #include "GameManager.h"
 #include "ChessAI.h"
 #include "Constants.h"
@@ -841,7 +842,7 @@ void GameManager::playGame() {
     initializeSDL();
     createPieces();
 
-    PlayerColor currentPlayerTurn = PlayerColor::Black; // Human controls Black for testing
+    PlayerColor currentPlayerTurn = PlayerColor::White; // White always moves first
 
     SDL_Point oldClickPos;
     int clickedPieceIdx = -1;

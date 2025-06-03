@@ -34,6 +34,6 @@ const PlayerColor HUMAN_PLAYER_COLOR = PlayerColor::White; // Human plays as Whi
 
 // Define the search depth for the Alpha-Beta pruning algorithm
 // Higher depth means stronger AI but more computation time
-const int AI_SEARCH_DEPTH = 20;
+const int AI_SEARCH_DEPTH = 5;
 
 #endif // CONSTANTS_H
