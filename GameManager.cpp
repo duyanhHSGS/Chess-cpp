@@ -1,10 +1,10 @@
-// GameManager.cpp
 #include "GameManager.h"
 #include "ChessAI.h"
 #include "Constants.h"
 #include "ChessPiece.h"
 
 #include <algorithm>
+#include <SDL_log.h> // Include SDL_log.h for SDL_Log
 
 GameManager::GameManager() :
     possibleMoveCount(0),
@@ -31,12 +31,12 @@ GameManager::~GameManager() {
 
 void GameManager::initializeSDL() {
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-        std::cerr << "SDL could not initialize! SDL_Error: " << SDL_GetError() << std::endl;
+        SDL_Log("SDL could not initialize! SDL_Error: %s", SDL_GetError());
         exit(1);
     }
 
     if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
-        std::cerr << "SDL_image could not initialize! IMG_Error: " << IMG_GetError() << std::endl;
+        SDL_Log("SDL_image could not initialize! IMG_Error: %s", IMG_GetError());
         SDL_Quit();
         exit(1);
     }
@@ -47,7 +47,7 @@ void GameManager::initializeSDL() {
                               TILE_SIZE * 9, TILE_SIZE * 9,
                               SDL_WINDOW_SHOWN);
     if (!window) {
-        std::cerr << "Window could not be created! SDL_Error: " << SDL_GetError() << std::endl;
+        SDL_Log("Window could not be created! SDL_Error: %s", SDL_GetError());
         IMG_Quit();
         SDL_Quit();
         exit(1);
@@ -55,7 +55,7 @@ void GameManager::initializeSDL() {
 
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
     if (!renderer) {
-        std::cerr << "Renderer could not be created! SDL_Error: " << SDL_GetError() << std::endl;
+        SDL_Log("Renderer could not be created! SDL_Error: %s", SDL_GetError());
         SDL_DestroyWindow(window);
         IMG_Quit();
         SDL_Quit();
@@ -64,28 +64,28 @@ void GameManager::initializeSDL() {
 
     figuresTexture = IMG_LoadTexture(renderer, "img/figures.png");
     if (!figuresTexture) {
-        std::cerr << "Failed to load figures.png! IMG_Error: " << IMG_GetError() << std::endl;
+        SDL_Log("Failed to load figures.png! IMG_Error: %s", IMG_GetError());
         cleanUpSDL();
         exit(1);
     }
 
     boardTexture = IMG_LoadTexture(renderer, "img/board1.png");
     if (!boardTexture) {
-        std::cerr << "Failed to load board1.png! IMG_Error: " << IMG_GetError() << std::endl;
+        SDL_Log("Failed to load board1.png! IMG_Error: %s", IMG_GetError());
         cleanUpSDL();
         exit(1);
     }
 
     positiveMoveTexture = IMG_LoadTexture(renderer, "img/no.png");
     if (!positiveMoveTexture) {
-        std::cerr << "Failed to load no.png! IMG_Error: " << IMG_GetError() << std::endl;
+        SDL_Log("Failed to load no.png! IMG_Error: %s", IMG_GetError());
         cleanUpSDL();
         exit(1);
     }
 
     redTexture = IMG_LoadTexture(renderer, "img/red.png");
     if (!redTexture) {
-        std::cerr << "Failed to load red.png! IMG_Error: " << IMG_GetError() << std::endl;
+        SDL_Log("Failed to load red.png! IMG_Error: %s", IMG_GetError());
         cleanUpSDL();
         exit(1);
     }
@@ -276,7 +276,7 @@ void GameManager::movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) {
 
 void GameManager::undoLastMove() {
     if (pieceIndexStack.empty()) {
-        std::cerr << "No moves to undo." << std::endl;
+        SDL_Log("No moves to undo.");
         return;
     }
 
@@ -341,7 +341,7 @@ void GameManager::addPossibleMove(int x, int y) {
         possibleMoves[possibleMoveCount] = {x * TILE_SIZE + OFFSET.x, y * TILE_SIZE + OFFSET.y};
         possibleMoveCount++;
     } else {
-        std::cerr << "Warning: possibleMoves array full. Some moves might be missed." << std::endl;
+        SDL_Log("Warning: possibleMoves array full. Some moves might be missed.");
     }
 }
 
@@ -842,7 +842,8 @@ void GameManager::playGame() {
     initializeSDL();
     createPieces();
 
-    PlayerColor currentPlayerTurn = PlayerColor::White; // White always moves first
+    // Human controls White, AI controls Black
+    PlayerColor currentPlayerTurn = PlayerColor::White;
 
     SDL_Point oldClickPos;
     int clickedPieceIdx = -1;
@@ -907,6 +908,11 @@ void GameManager::playGame() {
 
                         if (validMove) {
                             movePiece(clickedPieceIdx, oldClickPos, newMovePos);
+                            // Get and print evaluation after human move
+                            int currentEvaluation = ai->getEvaluation(this);
+                            SDL_Log("After %s make a move, the current evaluation point is %+d",
+                                    (currentPlayerTurn == PlayerColor::White ? "White" : "Black"), currentEvaluation);
+
                             currentPlayerTurn = (currentPlayerTurn == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
                         }
                         possibleMoveCount = 0;
@@ -919,8 +925,14 @@ void GameManager::playGame() {
 
         PlayerColor AI_COLOR = (HUMAN_PLAYER_COLOR == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
         if (currentPlayerTurn == AI_COLOR) {
-            bool isMaximizingPlayer = (AI_COLOR == PlayerColor::White);
+            SDL_Log("Thinking...");
+            for (int i = 1; i <= 4; ++i) { // Simulate thinking time with incremental logs
+                SDL_Log("Thinking... currently took %d", i);
+                SDL_Delay(1000); // Delay for 1 second
+            }
+            SDL_Log("thinking completed, its the player's turn");
 
+            bool isMaximizingPlayer = (AI_COLOR == PlayerColor::White);
             SDL_Point newAiPos = ai->getBestMove(this, isMaximizingPlayer);
 
             int aiPieceIdx = pieceIndexStack.top();
@@ -929,7 +941,13 @@ void GameManager::playGame() {
             positionStack.pop();
 
             movePiece(aiPieceIdx, oldAiPos, newAiPos);
-            currentPlayerTurn = HUMAN_PLAYER_COLOR;
+            
+            // Get and print evaluation after AI move
+            int currentEvaluation = ai->getEvaluation(this);
+            SDL_Log("After %s make a move, the current evaluation point is %+d",
+                    (AI_COLOR == PlayerColor::White ? "White" : "Black"), currentEvaluation);
+
+            currentPlayerTurn = (HUMAN_PLAYER_COLOR == PlayerColor::White) ? PlayerColor::White : PlayerColor::Black;
 
             clickCount = 0;
             clickedPieceIdx = -1;

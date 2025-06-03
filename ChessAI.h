@@ -2,49 +2,40 @@
 #ifndef CHESS_AI_H
 #define CHESS_AI_H
 
-#include <SDL.h> // Required for SDL_Point
-#include <vector> // For std::vector if used for moves
+#include <SDL.h>
+#include <vector>
+#include <limits> // For std::numeric_limits
+#include <algorithm> // For std::max, std::min
 
-// Forward declaration to avoid circular dependency with GameManager
+#include "Constants.h" // Include Constants to get PlayerColor definition
+
+// Forward declaration to avoid circular dependency
 class GameManager;
 
 class ChessAI {
 public:
-    // Calculates the best move for the AI using Alpha-Beta pruning.
-    // gameManager: Pointer to the GameManager instance to access game state and simulate moves.
-    // isMaximizingPlayer: True if the AI is the maximizing player (White), false if minimizing (Black).
+    ChessAI(); // Constructor
+
+    // Main function to get the best move using Alpha-Beta Pruning
     SDL_Point getBestMove(GameManager* gameManager, bool isMaximizingPlayer);
 
-    // Implements the Alpha-Beta pruning algorithm.
-    // depth: Current depth of the search.
-    // isMaximizingPlayer: True if the current node is a maximizing node, false if minimizing.
-    // alpha: The best score found so far for the maximizing player.
-    // beta: The best score found so far for the minimizing player.
-    // Returns the evaluated score for the current node.
-    int alphaBeta(GameManager* gameManager, int depth, bool isMaximizingPlayer, int alpha, int beta);
-
-    // Evaluates the current state of the board.
-    // This function will incorporate material value and positional value (e.g., Piece-Square Tables).
-    // gameManager: Pointer to the GameManager instance to access piece positions and types.
-    // Returns an integer representing the board's evaluation score.
-    int evaluateBoard(GameManager* gameManager);
+    // Evaluates the current board state.
+    // A positive score favors White, a negative score favors Black.
+    int getEvaluation(GameManager* gameManager) const;
 
 private:
-    // Piece-Square Tables (PSTs) for positional evaluation.
-    // These tables assign a value to each square for a specific piece type.
-    // The values are typically adjusted for White pieces, and mirrored for Black.
-    // Example: Pawn PST (values for white pawns, indexed [rank][file])
-    // The values are relative to the piece's base material value.
-    // For simplicity, these are defined here. In a larger engine, they might be in a separate config.
-    static const int PAWN_PST[8][8];
-    static const int KNIGHT_PST[8][8];
-    static const int BISHOP_PST[8][8];
-    static const int ROOK_PST[8][8];
-    static const int QUEEN_PST[8][8];
-    static const int KING_PST[8][8];
+    // Alpha-Beta Pruning algorithm
+    int minimax(GameManager* gameManager, int depth, int alpha, int beta, bool isMaximizingPlayer);
 
-    // Helper function to get the mirrored PST value for black pieces
-    int getMirroredPSTValue(const int pst[8][8], int x, int y);
+    // Helper to generate all pseudo-legal moves for the current player
+    // (doesn't check for king safety yet)
+    std::vector<std::tuple<int, SDL_Point, SDL_Point>> generatePseudoLegalMoves(GameManager* gameManager, PlayerColor currentPlayer);
+
+    // Helper to apply a move (for simulation)
+    void applyMove(GameManager* gameManager, int pieceIdx, SDL_Point oldPos, SDL_Point newPos);
+
+    // Helper to undo a move (for backtracking in minimax)
+    void undoMove(GameManager* gameManager);
 };
 
 #endif // CHESS_AI_H

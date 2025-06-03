@@ -53,11 +53,10 @@ public:
     void getCurrentBoardGrid(int grid[9][9]) const;
 
     bool isSquareAttacked(int targetX, int targetY, int attackingColor) const;
-
+    bool isKingInCheck(int kingColor) const;
 private:
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
-
     SDL_Texture* boardTexture = nullptr;
     SDL_Texture* figuresTexture = nullptr;
     SDL_Texture* positiveMoveTexture = nullptr;
@@ -71,16 +70,10 @@ private:
     bool whiteRookQueensideMoved;
     bool blackRookKingsideMoved;
     bool blackRookQueensideMoved;
-
     SDL_Point enPassantTargetSquare;
     int enPassantPawnIndex;
-
-    bool isKingInCheck(int kingColor) const;
-
     SDL_Point getKingPosition(int kingColor) const;
-
     SDL_Point getRookPosition(int rookColor, bool isKingside) const;
-
     bool checkAndAddMove(int pieceIdx, int newX, int newY, int pieceColor);
 };
 
