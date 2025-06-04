@@ -1,0 +1,159 @@
+[22:10:53] RECEIVED: ucinewgame
+[22:10:53] INFO: New game command received. Board reset.
+[22:10:53] RECEIVED: isready
+[22:10:53] SENT: readyok
+[22:10:53] RECEIVED: position startpos moves e2e4
+[22:10:53] INFO: Position startpos. Board reset.
+[22:10:53] INFO: Applied move: e2e4. Current turn: Black
+[22:10:53] RECEIVED: go wtime 359989 btime 360000 winc 0 binc 0
+[22:10:53] INFO: 'go' command received. Calculating best move for Black.
+[22:10:53] SENT: bestmove b8c6
+[22:10:53] RECEIVED: position startpos moves e2e4 b8c6 g1f3
+[22:10:53] INFO: Position startpos. Board reset.
+[22:10:53] INFO: Applied move: e2e4. Current turn: Black
+[22:10:53] INFO: Applied move: b8c6. Current turn: White
+[22:10:53] INFO: Applied move: g1f3. Current turn: Black
+[22:10:53] RECEIVED: go wtime 359989 btime 359958 winc 0 binc 0
+[22:10:53] INFO: 'go' command received. Calculating best move for Black.
+[22:10:53] SENT: bestmove d7d5
+[22:10:54] RECEIVED: position startpos moves e2e4 b8c6 g1f3 d7d5 e4d5
+[22:10:54] INFO: Position startpos. Board reset.
+[22:10:54] INFO: Applied move: e2e4. Current turn: Black
+[22:10:54] INFO: Applied move: b8c6. Current turn: White
+[22:10:54] INFO: Applied move: g1f3. Current turn: Black
+[22:10:54] INFO: Applied move: d7d5. Current turn: White
+[22:10:54] INFO: Applied move: e4d5. Current turn: Black
+[22:10:54] RECEIVED: go wtime 359963 btime 359853 winc 0 binc 0
+[22:10:54] INFO: 'go' command received. Calculating best move for Black.
+[22:10:54] SENT: bestmove g8f6
+[22:11:00] RECEIVED: position startpos moves e2e4 b8c6 g1f3 d7d5 e4d5 g8f6 d5c6
+[22:11:00] INFO: Position startpos. Board reset.
+[22:11:00] INFO: Applied move: e2e4. Current turn: Black
+[22:11:00] INFO: Applied move: b8c6. Current turn: White
+[22:11:00] INFO: Applied move: g1f3. Current turn: Black
+[22:11:00] INFO: Applied move: d7d5. Current turn: White
+[22:11:00] INFO: Applied move: e4d5. Current turn: Black
+[22:11:00] INFO: Applied move: g8f6. Current turn: White
+[22:11:00] INFO: Applied move: d5c6. Current turn: Black
+[22:11:00] RECEIVED: go wtime 354296 btime 359639 winc 0 binc 0
+[22:11:00] INFO: 'go' command received. Calculating best move for Black.
+[22:11:00] SENT: bestmove e7e5
+[22:11:08] RECEIVED: position startpos moves e2e4 b8c6 g1f3 d7d5 e4d5 g8f6 d5c6 e7e5 c6b7
+[22:11:08] INFO: Position startpos. Board reset.
+[22:11:08] INFO: Applied move: e2e4. Current turn: Black
+[22:11:08] INFO: Applied move: b8c6. Current turn: White
+[22:11:08] INFO: Applied move: g1f3. Current turn: Black
+[22:11:08] INFO: Applied move: d7d5. Current turn: White
+[22:11:08] INFO: Applied move: e4d5. Current turn: Black
+[22:11:08] INFO: Applied move: g8f6. Current turn: White
+[22:11:08] INFO: Applied move: d5c6. Current turn: Black
+[22:11:08] INFO: Applied move: e7e5. Current turn: White
+[22:11:08] INFO: Applied move: c6b7. Current turn: Black
+[22:11:08] RECEIVED: go wtime 347426 btime 359519 winc 0 binc 0
+[22:11:08] INFO: 'go' command received. Calculating best move for Black.
+[22:11:08] SENT: bestmove c8b7
+[22:11:18] RECEIVED: position startpos moves e2e4 b8c6 g1f3 d7d5 e4d5 g8f6 d5c6 e7e5 c6b7 c8b7 f1b5
+[22:11:18] INFO: Position startpos. Board reset.
+[22:11:18] INFO: Applied move: e2e4. Current turn: Black
+[22:11:18] INFO: Applied move: b8c6. Current turn: White
+[22:11:18] INFO: Applied move: g1f3. Current turn: Black
+[22:11:18] INFO: Applied move: d7d5. Current turn: White
+[22:11:18] INFO: Applied move: e4d5. Current turn: Black
+[22:11:18] INFO: Applied move: g8f6. Current turn: White
+[22:11:18] INFO: Applied move: d5c6. Current turn: Black
+[22:11:18] INFO: Applied move: e7e5. Current turn: White
+[22:11:18] INFO: Applied move: c6b7. Current turn: Black
+[22:11:18] INFO: Applied move: c8b7. Current turn: White
+[22:11:18] INFO: Applied move: f1b5. Current turn: Black
+[22:11:18] RECEIVED: go wtime 338212 btime 359321 winc 0 binc 0
+[22:11:18] INFO: 'go' command received. Calculating best move for Black.
+[22:11:18] SENT: bestmove e8e7
+[22:11:24] RECEIVED: position startpos moves e2e4 b8c6 g1f3 d7d5 e4d5 g8f6 d5c6 e7e5 c6b7 c8b7 f1b5 e8e7 d1e2
+[22:11:24] INFO: Position startpos. Board reset.
+[22:11:24] INFO: Applied move: e2e4. Current turn: Black
+[22:11:24] INFO: Applied move: b8c6. Current turn: White
+[22:11:24] INFO: Applied move: g1f3. Current turn: Black
+[22:11:24] INFO: Applied move: d7d5. Current turn: White
+[22:11:24] INFO: Applied move: e4d5. Current turn: Black
+[22:11:24] INFO: Applied move: g8f6. Current turn: White
+[22:11:24] INFO: Applied move: d5c6. Current turn: Black
+[22:11:24] INFO: Applied move: e7e5. Current turn: White
+[22:11:24] INFO: Applied move: c6b7. Current turn: Black
+[22:11:24] INFO: Applied move: c8b7. Current turn: White
+[22:11:24] INFO: Applied move: f1b5. Current turn: Black
+[22:11:24] INFO: Applied move: e8e7. Current turn: White
+[22:11:24] INFO: Applied move: d1e2. Current turn: Black
+[22:11:24] RECEIVED: go wtime 332670 btime 359279 winc 0 binc 0
+[22:11:24] INFO: 'go' command received. Calculating best move for Black.
+[22:11:24] SENT: bestmove d8d6
+[22:11:33] RECEIVED: position startpos moves e2e4 b8c6 g1f3 d7d5 e4d5 g8f6 d5c6 e7e5 c6b7 c8b7 f1b5 e8e7 d1e2 d8d6 f3e5
+[22:11:33] INFO: Position startpos. Board reset.
+[22:11:33] INFO: Applied move: e2e4. Current turn: Black
+[22:11:33] INFO: Applied move: b8c6. Current turn: White
+[22:11:33] INFO: Applied move: g1f3. Current turn: Black
+[22:11:33] INFO: Applied move: d7d5. Current turn: White
+[22:11:33] INFO: Applied move: e4d5. Current turn: Black
+[22:11:33] INFO: Applied move: g8f6. Current turn: White
+[22:11:33] INFO: Applied move: d5c6. Current turn: Black
+[22:11:33] INFO: Applied move: e7e5. Current turn: White
+[22:11:33] INFO: Applied move: c6b7. Current turn: Black
+[22:11:33] INFO: Applied move: c8b7. Current turn: White
+[22:11:33] INFO: Applied move: f1b5. Current turn: Black
+[22:11:33] INFO: Applied move: e8e7. Current turn: White
+[22:11:33] INFO: Applied move: d1e2. Current turn: Black
+[22:11:33] INFO: Applied move: d8d6. Current turn: White
+[22:11:33] INFO: Applied move: f3e5. Current turn: Black
+[22:11:33] RECEIVED: go wtime 324237 btime 359018 winc 0 binc 0
+[22:11:33] INFO: 'go' command received. Calculating best move for Black.
+[22:11:33] SENT: bestmove b7g2
+[22:11:39] RECEIVED: position startpos moves e2e4 b8c6 g1f3 d7d5 e4d5 g8f6 d5c6 e7e5 c6b7 c8b7 f1b5 e8e7 d1e2 d8d6 f3e5 b7g2 e5g6
+[22:11:39] INFO: Position startpos. Board reset.
+[22:11:39] INFO: Applied move: e2e4. Current turn: Black
+[22:11:39] INFO: Applied move: b8c6. Current turn: White
+[22:11:39] INFO: Applied move: g1f3. Current turn: Black
+[22:11:39] INFO: Applied move: d7d5. Current turn: White
+[22:11:39] INFO: Applied move: e4d5. Current turn: Black
+[22:11:39] INFO: Applied move: g8f6. Current turn: White
+[22:11:39] INFO: Applied move: d5c6. Current turn: Black
+[22:11:39] INFO: Applied move: e7e5. Current turn: White
+[22:11:39] INFO: Applied move: c6b7. Current turn: Black
+[22:11:39] INFO: Applied move: c8b7. Current turn: White
+[22:11:39] INFO: Applied move: f1b5. Current turn: Black
+[22:11:39] INFO: Applied move: e8e7. Current turn: White
+[22:11:39] INFO: Applied move: d1e2. Current turn: Black
+[22:11:39] INFO: Applied move: d8d6. Current turn: White
+[22:11:39] INFO: Applied move: f3e5. Current turn: Black
+[22:11:39] INFO: Applied move: b7g2. Current turn: White
+[22:11:39] INFO: Applied move: e5g6. Current turn: Black
+[22:11:39] RECEIVED: go wtime 318867 btime 358757 winc 0 binc 0
+[22:11:39] INFO: 'go' command received. Calculating best move for Black.
+[22:11:39] SENT: bestmove e7d8
+[22:11:47] RECEIVED: position startpos moves e2e4 b8c6 g1f3 d7d5 e4d5 g8f6 d5c6 e7e5 c6b7 c8b7 f1b5 e8e7 d1e2 d8d6 f3e5 b7g2 e5g6 e7d8 g6h8
+[22:11:47] INFO: Position startpos. Board reset.
+[22:11:47] INFO: Applied move: e2e4. Current turn: Black
+[22:11:47] INFO: Applied move: b8c6. Current turn: White
+[22:11:47] INFO: Applied move: g1f3. Current turn: Black
+[22:11:47] INFO: Applied move: d7d5. Current turn: White
+[22:11:47] INFO: Applied move: e4d5. Current turn: Black
+[22:11:47] INFO: Applied move: g8f6. Current turn: White
+[22:11:47] INFO: Applied move: d5c6. Current turn: Black
+[22:11:47] INFO: Applied move: e7e5. Current turn: White
+[22:11:47] INFO: Applied move: c6b7. Current turn: Black
+[22:11:47] INFO: Applied move: c8b7. Current turn: White
+[22:11:47] INFO: Applied move: f1b5. Current turn: Black
+[22:11:47] INFO: Applied move: e8e7. Current turn: White
+[22:11:47] INFO: Applied move: d1e2. Current turn: Black
+[22:11:47] INFO: Applied move: d8d6. Current turn: White
+[22:11:47] INFO: Applied move: f3e5. Current turn: Black
+[22:11:47] INFO: Applied move: b7g2. Current turn: White
+[22:11:47] INFO: Applied move: e5g6. Current turn: Black
+[22:11:47] INFO: Applied move: e7d8. Current turn: White
+[22:11:47] INFO: Applied move: g6h8. Current turn: Black
+[22:11:47] RECEIVED: go wtime 310888 btime 358757 winc 0 binc 0
+[22:11:47] INFO: 'go' command received. Calculating best move for Black.
+[22:11:48] SENT: bestmove a8c8
+[22:12:26] RECEIVED: quit
+[22:12:26] INFO: Quit command received. Exiting.
+
+--- [22:12:26] UCI Session Ended ---
+

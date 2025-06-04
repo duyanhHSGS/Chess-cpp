@@ -3,10 +3,10 @@
 
 #include <SDL.h>
 #include <SDL_image.h>
-#include <iostream>
 #include <stack>
 #include <vector>
 #include <memory>
+#include <string>
 
 #include "Constants.h"
 #include "ChessPiece.h"
@@ -75,6 +75,10 @@ public:
 
     bool isKingInCheck(int kingColor) const;
 
+    void setBoardFromFEN(const std::string& fen);
+    std::string convertMoveToAlgebraic(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) const;
+    void applyUCIStringMove(const std::string& moveStr, PlayerColor currentPlayer);
+
 private:
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
@@ -111,6 +115,12 @@ private:
     SDL_Point selectedPieceOriginalPos = {-1, -1};
     bool isDragging = false;
     SDL_Point dragOffset = {0, 0};
+
+    char toFile(int col) const;
+    int toRank(int row) const;
+    SDL_Point algebraicToSquare(const std::string& algebraic) const;
+    int getPieceIndexAt(SDL_Point pixelPos) const;
+    int getPieceIndexAtGrid(int row, int col) const;
 };
 
 #endif // GAME_MANAGER_H

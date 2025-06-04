@@ -23,7 +23,8 @@ public:
     // Evaluates the current board state.
     // A positive score favors White, a negative score favors Black.
     int getEvaluation(GameManager* gameManager) const;
-
+    // Determines if the current game state is an endgame based on material
+    bool isEndgame(GameManager* gameManager) const;
 private:
     // Alpha-Beta Pruning algorithm
     int minimax(GameManager* gameManager, int depth, int alpha, int beta, bool isMaximizingPlayer);
@@ -40,9 +41,6 @@ private:
 
     // Helper to undo a move (for backtracking in minimax)
     void undoMove(GameManager* gameManager);
-
-    // Determines if the current game state is an endgame based on material
-    bool isEndgame(GameManager* gameManager) const;
 
     // Piece-Square Tables (PSTs) for positional evaluation
     // Values are from White's perspective; Black's values will be mirrored.

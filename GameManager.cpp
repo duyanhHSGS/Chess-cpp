@@ -5,6 +5,8 @@
 
 #include <algorithm>
 #include <SDL_log.h>
+#include <sstream>
+#include <cctype>
 
 GameManager::GameManager() :
     possibleMoveCount(0),
@@ -73,7 +75,7 @@ void GameManager::initializeSDL() {
 
     boardTexture = IMG_LoadTexture(renderer, "img/board1.png");
     if (!boardTexture) {
-        SDL_Log("Failed to load board1.png! IMG_Error: %s", IMG_GetError());
+        SDL_Log("Failed to load board1.png! IMG_Error: %s", SDL_GetError());
         cleanUpSDL();
         exit(1);
     }
@@ -146,6 +148,20 @@ void GameManager::createPieces() {
             k++;
         }
     }
+    while(!gameStateSnapshots.empty()) gameStateSnapshots.pop();
+    while(!positionStack.empty()) positionStack.pop();
+    while(!pieceIndexStack.empty()) pieceIndexStack.pop();
+
+    whiteKingMoved = false;
+    blackKingMoved = false;
+    whiteRookKingsideMoved = false;
+    whiteRookQueensideMoved = false;
+    blackRookKingsideMoved = false;
+    blackRookQueensideMoved = false;
+    enPassantTargetSquare = {-1, -1};
+    enPassantPawnIndex = -1;
+    aiLastMovedFrom = {-1, -1};
+    aiLastMovedTo = {-1, -1};
 }
 
 void GameManager::movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) {
@@ -926,6 +942,9 @@ void GameManager::findPawnMoves(int pieceIdx, int x, int y, int grid[9][9]) {
 
 void GameManager::renderPieces() {
     for (int i = 0; i < 32; ++i) {
+        if (i == selectedPieceIdx && isDragging) {
+            continue;
+        }
         if (pieces[i].rect.x != -100 || pieces[i].rect.y != -100) {
             int xTex = std::abs(pieces[i].index) - 1;
             int yTex = pieces[i].index > 0 ? 1 : 0;
@@ -1037,6 +1056,9 @@ void GameManager::playGame() {
                                     (currentPlayerTurn == PlayerColor::White ? "White" : "Black"), currentEvaluation);
 
                             currentPlayerTurn = (currentPlayerTurn == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
+                        } else {
+                            pieces[selectedPieceIdx].rect.x = selectedPieceOriginalPos.x;
+                            pieces[selectedPieceIdx].rect.y = selectedPieceOriginalPos.y;
                         }
                         selectedPieceIdx = -1;
                         isDragging = false;
@@ -1075,21 +1097,11 @@ void GameManager::playGame() {
                             pieces[selectedPieceIdx].rect.x = selectedPieceOriginalPos.x;
                             pieces[selectedPieceIdx].rect.y = selectedPieceOriginalPos.y;
                         }
-                        if (selectedPieceOriginalPos.x == newMovePos.x && selectedPieceOriginalPos.y == newMovePos.y) {
-                            isDragging = false;
-                        } else {
-                            selectedPieceIdx = -1;
-                            isDragging = false;
-                            possibleMoveCount = 0;
-                            hoveredPieceIdx = -1;
-                        }
                     }
-                    if (validMove) {
-                        selectedPieceIdx = -1;
-                        isDragging = false;
-                        possibleMoveCount = 0;
-                        hoveredPieceIdx = -1;
-                    }
+                    selectedPieceIdx = -1;
+                    isDragging = false;
+                    possibleMoveCount = 0;
+                    hoveredPieceIdx = -1;
                 }
             }
         }
@@ -1097,6 +1109,7 @@ void GameManager::playGame() {
         PlayerColor AI_COLOR = (HUMAN_PLAYER_COLOR == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
         if (currentPlayerTurn == AI_COLOR) {
             SDL_Log("Thinking...");
+            // Removed the SDL_Delay loop here
             SDL_Log("thinking completed, its the player's turn");
 
             bool isMaximizingPlayer = (AI_COLOR == PlayerColor::White);
@@ -1128,13 +1141,8 @@ void GameManager::playGame() {
 
         SDL_RenderCopy(renderer, boardTexture, NULL, NULL);
 
-        if (selectedPieceIdx != -1) {
+        if (selectedPieceIdx != -1 || hoveredPieceIdx != -1) {
             for (int i = 0; i < possibleMoveCount; ++i) {
-                SDL_Rect destRect = {possibleMoves[i].x, possibleMoves[i].y, TILE_SIZE, TILE_SIZE};
-                SDL_RenderCopy(renderer, positiveMoveTexture, NULL, &destRect);
-            }
-        } else if (hoveredPieceIdx != -1) {
-             for (int i = 0; i < possibleMoveCount; ++i) {
                 SDL_Rect destRect = {possibleMoves[i].x, possibleMoves[i].y, TILE_SIZE, TILE_SIZE};
                 SDL_RenderCopy(renderer, positiveMoveTexture, NULL, &destRect);
             }
@@ -1179,4 +1187,169 @@ void GameManager::playGame() {
     }
 
     cleanUpSDL();
+}
+
+char GameManager::toFile(int col) const {
+    return 'a' + col;
+}
+
+int GameManager::toRank(int row) const {
+    return 8 - row;
+}
+
+SDL_Point GameManager::algebraicToSquare(const std::string& algebraic) const {
+    if (algebraic.length() < 2) return {-1, -1};
+    int col = algebraic[0] - 'a';
+    int row = 8 - (algebraic[1] - '0');
+    return {col * TILE_SIZE + OFFSET.x, row * TILE_SIZE + OFFSET.y};
+}
+
+int GameManager::getPieceIndexAt(SDL_Point pixelPos) const {
+    for (int i = 0; i < 32; ++i) {
+        if (pieces[i].rect.x == pixelPos.x && pieces[i].rect.y == pixelPos.y) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+int GameManager::getPieceIndexAtGrid(int row, int col) const {
+    SDL_Point pixelPos = {col * TILE_SIZE + OFFSET.x, row * TILE_SIZE + OFFSET.y};
+    return getPieceIndexAt(pixelPos);
+}
+
+void GameManager::setBoardFromFEN(const std::string& fen) {
+    for (int i = 0; i < 32; ++i) {
+        pieces[i].rect.x = -100;
+        pieces[i].rect.y = -100;
+        pieces[i].index = 0;
+        pieces[i].cost = 0;
+    }
+    while(!gameStateSnapshots.empty()) gameStateSnapshots.pop();
+    while(!positionStack.empty()) positionStack.pop();
+    while(!pieceIndexStack.empty()) pieceIndexStack.pop();
+
+    whiteKingMoved = false;
+    blackKingMoved = false;
+    whiteRookKingsideMoved = false;
+    whiteRookQueensideMoved = false;
+    blackRookKingsideMoved = false;
+    blackRookQueensideMoved = false;
+    enPassantTargetSquare = {-1, -1};
+    enPassantPawnIndex = -1;
+    aiLastMovedFrom = {-1, -1};
+    aiLastMovedTo = {-1, -1};
+
+    std::stringstream ss(fen);
+    std::string boardPart;
+    ss >> boardPart;
+
+    int currentPieceK = 0;
+    int row = 0;
+    int col = 0;
+
+    for (char c : boardPart) {
+        if (c == '/') {
+            row++;
+            col = 0;
+        } else if (isdigit(c)) {
+            col += (c - '0');
+        } else {
+            int pieceIndex = 0;
+            int pieceValue = 0;
+            int pieceColor = 0;
+
+            if (isupper(c)) {
+                pieceColor = 1;
+            } else {
+                pieceColor = -1;
+            }
+
+            switch (tolower(c)) {
+                case 'r': pieceIndex = 1; pieceValue = 50; break;
+                case 'n': pieceIndex = 2; pieceValue = 30; break;
+                case 'b': pieceIndex = 3; pieceValue = 30; break;
+                case 'q': pieceIndex = 4; pieceValue = 90; break;
+                case 'k': pieceIndex = 5; pieceValue = 900; break;
+                case 'p': pieceIndex = 6; pieceValue = 10; break;
+                default: break;
+            }
+
+            if (pieceIndex != 0) {
+                pieces[currentPieceK].texture = figuresTexture;
+                pieces[currentPieceK].index = pieceColor * pieceIndex;
+                pieces[currentPieceK].rect = {col * TILE_SIZE + OFFSET.x, row * TILE_SIZE + OFFSET.y, TILE_SIZE, TILE_SIZE};
+                pieces[currentPieceK].cost = pieceColor * pieceValue;
+                currentPieceK++;
+            }
+            col++;
+        }
+    }
+}
+
+std::string GameManager::convertMoveToAlgebraic(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) const {
+    std::string moveStr = "";
+    moveStr += toFile((oldPos.x - OFFSET.x) / TILE_SIZE);
+    moveStr += std::to_string(toRank((oldPos.y - OFFSET.y) / TILE_SIZE));
+    moveStr += toFile((newPos.x - OFFSET.x) / TILE_SIZE);
+    moveStr += std::to_string(toRank((newPos.y - OFFSET.y) / TILE_SIZE));
+
+    int pieceType = std::abs(pieces[pieceIdx].index);
+    int newY_grid = (newPos.y - OFFSET.y) / TILE_SIZE;
+
+    if (pieceType == 6 && (newY_grid == 0 || newY_grid == 7)) {
+        moveStr += "q";
+    }
+
+    return moveStr;
+}
+
+void GameManager::applyUCIStringMove(const std::string& moveStr, PlayerColor currentPlayer) {
+    if (moveStr.length() < 4) {
+        SDL_Log("Invalid UCI move string: %s", moveStr.c_str());
+        return;
+    }
+
+    std::string oldSquareStr = moveStr.substr(0, 2);
+    std::string newSquareStr = moveStr.substr(2, 2);
+    char promotionChar = (moveStr.length() == 5) ? moveStr[4] : ' ';
+
+    SDL_Point oldPixelPos = algebraicToSquare(oldSquareStr);
+    SDL_Point newPixelPos = algebraicToSquare(newSquareStr);
+
+    int pieceIdx = getPieceIndexAt(oldPixelPos);
+
+    if (pieceIdx == -1) {
+        SDL_Log("Could not find piece at %s for move %s", oldSquareStr.c_str(), moveStr.c_str());
+        return;
+    }
+
+    int oldX_grid = (oldPixelPos.x - OFFSET.x) / TILE_SIZE;
+    int oldY_grid = (oldPixelPos.y - OFFSET.y) / TILE_SIZE;
+    int newX_grid = (newPixelPos.x - OFFSET.x) / TILE_SIZE;
+    int newY_grid = (newPixelPos.y - OFFSET.y) / TILE_SIZE;
+
+    if (std::abs(pieces[pieceIdx].index) == 5 && std::abs(newX_grid - oldX_grid) == 2) {
+        movePiece(pieceIdx, oldPixelPos, newPixelPos);
+    } else if (std::abs(pieces[pieceIdx].index) == 6 && (newY_grid == 0 || newY_grid == 7) && promotionChar != ' ') {
+        movePiece(pieceIdx, oldPixelPos, newPixelPos);
+        int promotedType = 0;
+        if (tolower(promotionChar) == 'q') promotedType = 4;
+        else if (tolower(promotionChar) == 'r') promotedType = 1;
+        else if (tolower(promotionChar) == 'b') promotedType = 3;
+        else if (tolower(promotionChar) == 'n') promotedType = 2;
+        pieces[pieceIdx].index = (pieces[pieceIdx].index > 0 ? 1 : -1) * promotedType;
+        int pieceValue = 0;
+        if (promotedType == 1) pieceValue = 50;
+        else if (promotedType == 2) pieceValue = 30;
+        else if (promotedType == 3) pieceValue = 30;
+        else if (promotedType == 4) pieceValue = 90;
+        pieces[pieceIdx].cost = (pieces[pieceIdx].index > 0 ? 1 : -1) * pieceValue;
+    }
+    else {
+        movePiece(pieceIdx, oldPixelPos, newPixelPos);
+    }
+
+    aiLastMovedFrom = oldPixelPos;
+    aiLastMovedTo = newPixelPos;
 }
