@@ -1,12 +1,11 @@
-// ChessAI.cpp
 #include "ChessAI.h"
-#include "GameManager.h" // Include GameManager to access its public methods
-#include "Constants.h"   // Include Constants for AI_SEARCH_DEPTH etc.
-#include <tuple>         // For std::tuple
-#include <SDL_log.h>     // For SDL_Log
+#include "GameManager.h"
+#include "Constants.h"
+#include <tuple>
+#include <iostream> 
 
-// Piece-Square Tables (PSTs) definitions
-// Values are from White's perspective; Black's values will be mirrored (row = 7 - row)
+const int FUTILITY_MARGIN = 10;
+
 const int ChessAI::pawnPST[8][8] = {
     {0, 0, 0, 0, 0, 0, 0, 0},
     {50, 50, 50, 50, 50, 50, 50, 50},
@@ -62,7 +61,6 @@ const int ChessAI::queenPST[8][8] = {
     {-20, -10, -10, -5, -5, -10, -10, -20}
 };
 
-// King PST for middlegame (prioritizes safety)
 const int ChessAI::kingPST_middlegame[8][8] = {
     {-30, -40, -40, -50, -50, -40, -40, -30},
     {-30, -40, -40, -50, -50, -40, -40, -30},
@@ -74,7 +72,6 @@ const int ChessAI::kingPST_middlegame[8][8] = {
     {20, 30, 10, 0, 0, 10, 30, 20}
 };
 
-// King PST for endgame (prioritizes centralization and activity)
 const int ChessAI::kingPST_endgame[8][8] = {
     {-50, -40, -30, -20, -20, -30, -40, -50},
     {-30, -20, -10, 0, 0, -10, -20, -30},
@@ -88,38 +85,34 @@ const int ChessAI::kingPST_endgame[8][8] = {
 
 
 ChessAI::ChessAI() {
-    // Constructor implementation (if any initialization is needed)
 }
 
-// Determines if the current game state is an endgame based on material
 bool ChessAI::isEndgame(GameManager* gameManager) const {
     const ChessPiece* pieces = gameManager->getPieces();
     int whiteQueens = 0;
     int blackQueens = 0;
-    int whiteMinorPieces = 0; // Knights and Bishops
-    int blackMinorPieces = 0; // Knights and Bishops
+    int whiteMinorPieces = 0;
+    int blackMinorPieces = 0;
 
     for (int i = 0; i < 32; ++i) {
-        if (pieces[i].rect.x == -100 && pieces[i].rect.y == -100) continue; // Skip captured
+        if (pieces[i].rect.x == -100 && pieces[i].rect.y == -100) continue;
 
         int pieceType = std::abs(pieces[i].index);
         int pieceColor = pieces[i].index > 0 ? 1 : -1;
 
-        if (pieceType == 4) { // Queen
+        if (pieceType == 4) {
             if (pieceColor == 1) whiteQueens++;
             else blackQueens++;
-        } else if (pieceType == 2 || pieceType == 3) { // Knight or Bishop
+        } else if (pieceType == 2 || pieceType == 3) {
             if (pieceColor == 1) whiteMinorPieces++;
             else blackMinorPieces++;
         }
     }
 
-    // Endgame condition 1: No queens on the board AND total minor pieces < 3
     if (whiteQueens == 0 && blackQueens == 0 && (whiteMinorPieces + blackMinorPieces) < 3) {
         return true;
     }
 
-    // Endgame condition 2: One queen on the board AND total minor pieces < 2
     if ((whiteQueens + blackQueens) == 1 && (whiteMinorPieces + blackMinorPieces) < 2) {
         return true;
     }
@@ -127,13 +120,10 @@ bool ChessAI::isEndgame(GameManager* gameManager) const {
     return false;
 }
 
-// Evaluates the current board state.
-// A positive score favors White, a negative score favors Black.
 int ChessAI::getEvaluation(GameManager* gameManager) const {
     int evaluation = 0;
-    const ChessPiece* pieces = gameManager->getPieces(); // Access pieces from GameManager
+    const ChessPiece* pieces = gameManager->getPieces();
 
-    // Determine which King PST to use
     const int (*currentKingPST)[8];
     if (isEndgame(gameManager)) {
         currentKingPST = kingPST_endgame;
@@ -143,65 +133,60 @@ int ChessAI::getEvaluation(GameManager* gameManager) const {
 
 
     for (int i = 0; i < 32; ++i) {
-        // Only consider pieces that are on the board
         if (pieces[i].rect.x != -100 || pieces[i].rect.y != -100) {
-            evaluation += pieces[i].cost; // pieces[i].cost already stores value with sign for color
+            evaluation += pieces[i].cost;
 
             int pieceGridX = (pieces[i].rect.x - OFFSET.x) / TILE_SIZE;
             int pieceGridY = (pieces[i].rect.y - OFFSET.y) / TILE_SIZE;
             int pieceType = std::abs(pieces[i].index);
-            int pieceColor = pieces[i].index > 0 ? 1 : -1; // 1 for White, -1 for Black
+            int pieceColor = pieces[i].index > 0 ? 1 : -1;
 
             int positionalValue = 0;
             int row = pieceGridY;
             int col = pieceGridX;
 
-            // Adjust row for Black pieces as PSTs are defined from White's perspective
-            if (pieceColor == -1) { // If it's a Black piece
-                row = 7 - row; // Mirror the row index
+            if (pieceColor == -1) {
+                row = 7 - row;
             }
 
             switch (pieceType) {
-                case 6: // Pawn
+                case 6:
                     positionalValue = pawnPST[row][col];
                     break;
-                case 2: // Knight
+                case 2:
                     positionalValue = knightPST[row][col];
                     break;
-                case 3: // Bishop
+                case 3:
                     positionalValue = bishopPST[row][col];
                     break;
-                case 1: // Rook
+                case 1:
                     positionalValue = rookPST[row][col];
                     break;
-                case 4: // Queen
+                case 4:
                     positionalValue = queenPST[row][col];
                     break;
-                case 5: // King
-                    positionalValue = currentKingPST[row][col]; // Use selected King PST
+                case 5:
+                    positionalValue = currentKingPST[row][col];
                     break;
                 default:
-                    positionalValue = 0; // Should not happen
+                    positionalValue = 0;
                     break;
             }
             
-            // Add positional value, applying the correct sign for piece color
             evaluation += (pieceColor * positionalValue);
         }
     }
     return evaluation;
 }
 
-// Main function to get the best move using Alpha-Beta Pruning
-SDL_Point ChessAI::getBestMove(GameManager* gameManager, bool isMaximizingPlayer) {
+GamePoint ChessAI::getBestMove(GameManager* gameManager, bool isMaximizingPlayer) {
     int bestValue = isMaximizingPlayer ? std::numeric_limits<int>::min() : std::numeric_limits<int>::max();
-    SDL_Point bestNewPos = {-1, -1};
+    GamePoint bestNewPos = {-1, -1};
     int bestPieceIdx = -1;
-    SDL_Point bestOldPos = {-1, -1};
+    GamePoint bestOldPos = {-1, -1};
 
     PlayerColor currentPlayer = isMaximizingPlayer ? PlayerColor::White : PlayerColor::Black;
 
-    // Determine the search depth based on game phase
     int currentSearchDepth;
     if (isEndgame(gameManager)) {
         currentSearchDepth = AI_ENDGAME_SEARCH_DEPTH;
@@ -209,21 +194,17 @@ SDL_Point ChessAI::getBestMove(GameManager* gameManager, bool isMaximizingPlayer
         currentSearchDepth = AI_SEARCH_DEPTH;
     }
 
-    // Generate all possible moves for the current player
-    std::vector<std::tuple<int, SDL_Point, SDL_Point>> moves = generatePseudoLegalMoves(gameManager, currentPlayer);
+    std::vector<std::tuple<int, GamePoint, GamePoint>> moves = generatePseudoLegalMoves(gameManager, currentPlayer);
 
     for (const auto& move : moves) {
         int pieceIdx = std::get<0>(move);
-        SDL_Point oldPos = std::get<1>(move);
-        SDL_Point newPos = std::get<2>(move);
+        GamePoint oldPos = std::get<1>(move);
+        GamePoint newPos = std::get<2>(move);
 
-        // Apply the move (temporarily)
         applyMove(gameManager, pieceIdx, oldPos, newPos);
 
-        // Call minimax for the opponent's turn with the determined depth
         int value = minimax(gameManager, currentSearchDepth - 1, std::numeric_limits<int>::min(), std::numeric_limits<int>::max(), !isMaximizingPlayer);
 
-        // Undo the move
         undoMove(gameManager);
 
         if (isMaximizingPlayer) {
@@ -233,7 +214,7 @@ SDL_Point ChessAI::getBestMove(GameManager* gameManager, bool isMaximizingPlayer
                 bestOldPos = oldPos;
                 bestNewPos = newPos;
             }
-        } else { // Minimizing player
+        } else {
             if (value < bestValue) {
                 bestValue = value;
                 bestPieceIdx = pieceIdx;
@@ -243,49 +224,39 @@ SDL_Point ChessAI::getBestMove(GameManager* gameManager, bool isMaximizingPlayer
         }
     }
 
-    // Push the chosen move's piece index and old position onto the stack
-    // so GameManager::playGame can retrieve them.
-    // This is a specific requirement due to how GameManager::playGame processes AI moves.
     gameManager->positionStack.push(bestOldPos);
     gameManager->pieceIndexStack.push(bestPieceIdx);
 
     return bestNewPos;
 }
 
-// Alpha-Beta Pruning algorithm
 int ChessAI::minimax(GameManager* gameManager, int depth, int alpha, int beta, bool isMaximizingPlayer) {
-    // Base case: If depth is 0, enter quiescence search
     if (depth == 0) {
         return quiescenceSearch(gameManager, alpha, beta, isMaximizingPlayer);
     }
 
     PlayerColor currentPlayer = isMaximizingPlayer ? PlayerColor::White : PlayerColor::Black;
-    std::vector<std::tuple<int, SDL_Point, SDL_Point>> moves = generatePseudoLegalMoves(gameManager, currentPlayer);
+    std::vector<std::tuple<int, GamePoint, GamePoint>> moves = generatePseudoLegalMoves(gameManager, currentPlayer);
 
     if (moves.empty()) {
-        // No legal moves: check for checkmate or stalemate
         if (gameManager->isKingInCheck(static_cast<int>(currentPlayer))) {
-            // Checkmate: current player's king is in check and has no legal moves
             return isMaximizingPlayer ? std::numeric_limits<int>::min() + 1000 : std::numeric_limits<int>::max() - 1000;
         } else {
-            // Stalemate: current player's king is not in check but has no legal moves
-            return 0; // Draw
+            return 0;
         }
     }
 
 
     if (isMaximizingPlayer) {
         int maxEval = std::numeric_limits<int>::min();
-        // Futility Pruning (Standard Futility Pruning for maximizing)
-        // If current alpha is already very high and this branch is unlikely to beat it
         if (depth <= 2 && getEvaluation(gameManager) + FUTILITY_MARGIN <= alpha) {
             return alpha;
         }
 
         for (const auto& move : moves) {
             int pieceIdx = std::get<0>(move);
-            SDL_Point oldPos = std::get<1>(move);
-            SDL_Point newPos = std::get<2>(move);
+            GamePoint oldPos = std::get<1>(move);
+            GamePoint newPos = std::get<2>(move);
 
             applyMove(gameManager, pieceIdx, oldPos, newPos);
             int eval = minimax(gameManager, depth - 1, alpha, beta, false);
@@ -294,22 +265,20 @@ int ChessAI::minimax(GameManager* gameManager, int depth, int alpha, int beta, b
             maxEval = std::max(maxEval, eval);
             alpha = std::max(alpha, eval);
             if (beta <= alpha) {
-                break; // Beta cut-off
+                break;
             }
         }
         return maxEval;
-    } else { // Minimizing player
+    } else {
         int minEval = std::numeric_limits<int>::max();
-        // Futility Pruning (Standard Futility Pruning for minimizing)
-        // If current beta is already very low and this branch is unlikely to beat it
         if (depth <= 2 && getEvaluation(gameManager) - FUTILITY_MARGIN >= beta) {
             return beta;
         }
 
         for (const auto& move : moves) {
             int pieceIdx = std::get<0>(move);
-            SDL_Point oldPos = std::get<1>(move);
-            SDL_Point newPos = std::get<2>(move);
+            GamePoint oldPos = std::get<1>(move);
+            GamePoint newPos = std::get<2>(move);
 
             applyMove(gameManager, pieceIdx, oldPos, newPos);
             int eval = minimax(gameManager, depth - 1, alpha, beta, true);
@@ -318,47 +287,43 @@ int ChessAI::minimax(GameManager* gameManager, int depth, int alpha, int beta, b
             minEval = std::min(minEval, eval);
             beta = std::min(beta, eval);
             if (beta <= alpha) {
-                break; // Alpha cut-off
+                break;
             }
         }
         return minEval;
     }
 }
 
-// Quiescence Search
 int ChessAI::quiescenceSearch(GameManager* gameManager, int alpha, int beta, bool isMaximizingPlayer) {
     int standPat = getEvaluation(gameManager);
 
     if (isMaximizingPlayer) {
         if (standPat >= beta) {
-            return beta; // Fail-hard beta cut-off
+            return beta;
         }
         alpha = std::max(alpha, standPat);
-        // Reverse Futility Pruning for maximizing (if standPat is already good enough, don't search captures)
-        if (standPat + FUTILITY_MARGIN <= alpha) { // Check if we can prune even if we gain a little
+        if (standPat + FUTILITY_MARGIN <= alpha) {
             return alpha;
         }
-    } else { // Minimizing player
+    } else {
         if (standPat <= alpha) {
-            return alpha; // Fail-hard alpha cut-off
+            return alpha;
         }
         beta = std::min(beta, standPat);
-        // Reverse Futility Pruning for minimizing (if standPat is already bad enough, don't search captures)
-        if (standPat - FUTILITY_MARGIN >= beta) { // Check if we can prune even if we lose a little
+        if (standPat - FUTILITY_MARGIN >= beta) {
             return beta;
         }
     }
 
     PlayerColor currentPlayer = isMaximizingPlayer ? PlayerColor::White : PlayerColor::Black;
-    std::vector<std::tuple<int, SDL_Point, SDL_Point>> allMoves = generatePseudoLegalMoves(gameManager, currentPlayer);
+    std::vector<std::tuple<int, GamePoint, GamePoint>> allMoves = generatePseudoLegalMoves(gameManager, currentPlayer);
 
-    // Filter for only tactical moves (captures for simplicity in this first pass)
-    std::vector<std::tuple<int, SDL_Point, SDL_Point>> tacticalMoves;
+    std::vector<std::tuple<int, GamePoint, GamePoint>> tacticalMoves;
     const ChessPiece* pieces = gameManager->getPieces();
 
     for (const auto& move : allMoves) {
         int pieceIdx = std::get<0>(move);
-        SDL_Point newPos = std::get<2>(move);
+        GamePoint newPos = std::get<2>(move);
 
         bool isCapture = false;
         for (int p = 0; p < 32; ++p) {
@@ -374,7 +339,6 @@ int ChessAI::quiescenceSearch(GameManager* gameManager, int alpha, int beta, boo
         }
     }
 
-    // If no tactical moves, return standPat
     if (tacticalMoves.empty()) {
         return standPat;
     }
@@ -382,8 +346,8 @@ int ChessAI::quiescenceSearch(GameManager* gameManager, int alpha, int beta, boo
     if (isMaximizingPlayer) {
         for (const auto& move : tacticalMoves) {
             int pieceIdx = std::get<0>(move);
-            SDL_Point oldPos = std::get<1>(move);
-            SDL_Point newPos = std::get<2>(move);
+            GamePoint oldPos = std::get<1>(move);
+            GamePoint newPos = std::get<2>(move);
 
             applyMove(gameManager, pieceIdx, oldPos, newPos);
             int eval = quiescenceSearch(gameManager, alpha, beta, false);
@@ -395,11 +359,11 @@ int ChessAI::quiescenceSearch(GameManager* gameManager, int alpha, int beta, boo
             }
         }
         return alpha;
-    } else { // Minimizing player
+    } else {
         for (const auto& move : tacticalMoves) {
             int pieceIdx = std::get<0>(move);
-            SDL_Point oldPos = std::get<1>(move);
-            SDL_Point newPos = std::get<2>(move);
+            GamePoint oldPos = std::get<1>(move);
+            GamePoint newPos = std::get<2>(move);
 
             applyMove(gameManager, pieceIdx, oldPos, newPos);
             int eval = quiescenceSearch(gameManager, alpha, beta, true);
@@ -414,9 +378,8 @@ int ChessAI::quiescenceSearch(GameManager* gameManager, int alpha, int beta, boo
     }
 }
 
-// Helper to generate all pseudo-legal moves for the current player
-std::vector<std::tuple<int, SDL_Point, SDL_Point>> ChessAI::generatePseudoLegalMoves(GameManager* gameManager, PlayerColor currentPlayer) {
-    std::vector<std::tuple<int, SDL_Point, SDL_Point>> pseudoLegalMoves;
+std::vector<std::tuple<int, GamePoint, GamePoint>> ChessAI::generatePseudoLegalMoves(GameManager* gameManager, PlayerColor currentPlayer) {
+    std::vector<std::tuple<int, GamePoint, GamePoint>> pseudoLegalMoves;
     const ChessPiece* pieces = gameManager->getPieces();
 
     int startIdx = (currentPlayer == PlayerColor::White) ? 16 : 0;
@@ -427,7 +390,7 @@ std::vector<std::tuple<int, SDL_Point, SDL_Point>> ChessAI::generatePseudoLegalM
 
         gameManager->calculatePossibleMoves(i);
 
-        SDL_Point currentPiecePos = {pieces[i].rect.x, pieces[i].rect.y};
+        GamePoint currentPiecePos = {pieces[i].rect.x, pieces[i].rect.y};
         for (int j = 0; j < gameManager->possibleMoveCount; ++j) {
             pseudoLegalMoves.emplace_back(i, currentPiecePos, gameManager->possibleMoves[j]);
         }
@@ -435,12 +398,10 @@ std::vector<std::tuple<int, SDL_Point, SDL_Point>> ChessAI::generatePseudoLegalM
     return pseudoLegalMoves;
 }
 
-// Helper to apply a move (for simulation)
-void ChessAI::applyMove(GameManager* gameManager, int pieceIdx, SDL_Point oldPos, SDL_Point newPos) {
+void ChessAI::applyMove(GameManager* gameManager, int pieceIdx, GamePoint oldPos, GamePoint newPos) {
     gameManager->movePiece(pieceIdx, oldPos, newPos);
 }
 
-// Helper to undo a move (for backtracking in minimax)
 void ChessAI::undoMove(GameManager* gameManager) {
     gameManager->undoLastMove();
 }

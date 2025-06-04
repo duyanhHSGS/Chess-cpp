@@ -26,7 +26,7 @@ std::string getCurrentTimestamp() {
 }
 
 void uciLoop(GameManager& gameManager) {
-    const std::string logFilePath = "C:\\Users\\Laptop\\Desktop\\CodeProjects\\NeuralNetwork\\Carolyna_log.txt";
+    const std::string logFilePath = "log.txt";
 
     log_file.open(logFilePath, std::ios_base::app);
     if (!log_file.is_open()) {
@@ -109,11 +109,11 @@ void uciLoop(GameManager& gameManager) {
 
             log_file << "[" << getCurrentTimestamp() << "] INFO: 'go' command received. Calculating best move for " << (isMaximizingPlayer ? "White" : "Black") << "." << std::endl;
 
-            SDL_Point bestNewPos = gameManager.ai->getBestMove(&gameManager, isMaximizingPlayer);
+            GamePoint bestNewPos = gameManager.ai->getBestMove(&gameManager, isMaximizingPlayer);
 
             int bestPieceIdx = gameManager.pieceIndexStack.top();
             gameManager.pieceIndexStack.pop();
-            SDL_Point bestOldPos = gameManager.positionStack.top();
+            GamePoint bestOldPos = gameManager.positionStack.top();
             gameManager.positionStack.pop();
 
             std::string algebraicMove = gameManager.convertMoveToAlgebraic(bestPieceIdx, bestOldPos, bestNewPos);
@@ -141,7 +141,7 @@ void uciLoop(GameManager& gameManager) {
 }
 
 int main(int argc, char* args[]) {
-        GameManager gameManager;
-        uciLoop(gameManager);
+    GameManager gameManager;
+    uciLoop(gameManager);
     return 0;
 }

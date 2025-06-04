@@ -4,7 +4,7 @@
 #include "ChessPiece.h"
 
 #include <algorithm>
-#include <SDL_log.h>
+#include <iostream>
 #include <sstream>
 #include <cctype>
 
@@ -19,99 +19,10 @@ GameManager::GameManager() :
     enPassantTargetSquare({-1, -1}),
     enPassantPawnIndex(-1)
 {
-    window = nullptr;
-    renderer = nullptr;
-    boardTexture = nullptr;
-    figuresTexture = nullptr;
-    positiveMoveTexture = nullptr;
-    redTexture = nullptr;
-    blueTexture = nullptr;
     ai = std::make_unique<ChessAI>();
 }
 
 GameManager::~GameManager() {
-    cleanUpSDL();
-}
-
-void GameManager::initializeSDL() {
-    if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-        SDL_Log("SDL could not initialize! SDL_Error: %s", SDL_GetError());
-        exit(1);
-    }
-
-    if (!(IMG_Init(IMG_INIT_PNG) & IMG_INIT_PNG)) {
-        SDL_Log("SDL_image could not initialize! IMG_Error: %s", IMG_GetError());
-        SDL_Quit();
-        exit(1);
-    }
-
-    window = SDL_CreateWindow("Chess - Alpha Beta Pruning Mode",
-                              SDL_WINDOWPOS_UNDEFINED,
-                              SDL_WINDOWPOS_UNDEFINED,
-                              TILE_SIZE * 9, TILE_SIZE * 9,
-                              SDL_WINDOW_SHOWN);
-    if (!window) {
-        SDL_Log("Window could not be created! SDL_Error: %s", SDL_GetError());
-        IMG_Quit();
-        SDL_Quit();
-        exit(1);
-    }
-
-    renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_ACCELERATED);
-    if (!renderer) {
-        SDL_Log("Renderer could not be created! SDL_Error: %s", SDL_GetError());
-        SDL_DestroyWindow(window);
-        IMG_Quit();
-        SDL_Quit();
-        exit(1);
-    }
-
-    figuresTexture = IMG_LoadTexture(renderer, "img/figures.png");
-    if (!figuresTexture) {
-        SDL_Log("Failed to load figures.png! IMG_Error: %s", IMG_GetError());
-        cleanUpSDL();
-        exit(1);
-    }
-
-    boardTexture = IMG_LoadTexture(renderer, "img/board1.png");
-    if (!boardTexture) {
-        SDL_Log("Failed to load board1.png! IMG_Error: %s", SDL_GetError());
-        cleanUpSDL();
-        exit(1);
-    }
-
-    positiveMoveTexture = IMG_LoadTexture(renderer, "img/no.png");
-    if (!positiveMoveTexture) {
-        SDL_Log("Failed to load no.png! IMG_Error: %s", SDL_GetError());
-        cleanUpSDL();
-        exit(1);
-    }
-
-    redTexture = IMG_LoadTexture(renderer, "img/red.png");
-    if (!redTexture) {
-        SDL_Log("Failed to load red.png! IMG_Error: %s", SDL_GetError());
-        cleanUpSDL();
-        exit(1);
-    }
-
-    blueTexture = IMG_LoadTexture(renderer, "img/blue.png");
-    if (!blueTexture) {
-        SDL_Log("Failed to load blue.png! IMG_Error: %s", SDL_GetError());
-        cleanUpSDL();
-        exit(1);
-    }
-}
-
-void GameManager::cleanUpSDL() {
-    if (positiveMoveTexture) SDL_DestroyTexture(positiveMoveTexture);
-    if (boardTexture) SDL_DestroyTexture(boardTexture);
-    if (figuresTexture) SDL_DestroyTexture(figuresTexture);
-    if (redTexture) SDL_DestroyTexture(redTexture);
-    if (blueTexture) SDL_DestroyTexture(blueTexture);
-    if (renderer) SDL_DestroyRenderer(renderer);
-    if (window) SDL_DestroyWindow(window);
-    IMG_Quit();
-    SDL_Quit();
 }
 
 void GameManager::createPieces() {
@@ -124,16 +35,8 @@ void GameManager::createPieces() {
 
             if (n == 0) continue;
 
-            int xTex = std::abs(n) - 1;
-            int yTex = n > 0 ? 1 : 0;
-
-            pieces[k].texture = figuresTexture;
             pieces[k].index = n;
-            pieces[k].rect = {xTex * TILE_SIZE, yTex * TILE_SIZE, TILE_SIZE, TILE_SIZE};
-            pieces[k].rect.x = j * TILE_SIZE + OFFSET.x;
-            pieces[k].rect.y = i * TILE_SIZE + OFFSET.y;
-            pieces[k].rect.w = TILE_SIZE;
-            pieces[k].rect.h = TILE_SIZE;
+            pieces[k].rect = {j * TILE_SIZE + OFFSET.x, i * TILE_SIZE + OFFSET.y, TILE_SIZE, TILE_SIZE};
 
             int pieceValue = 0;
             int pieceType = std::abs(pieces[k].index);
@@ -160,11 +63,9 @@ void GameManager::createPieces() {
     blackRookQueensideMoved = false;
     enPassantTargetSquare = {-1, -1};
     enPassantPawnIndex = -1;
-    aiLastMovedFrom = {-1, -1};
-    aiLastMovedTo = {-1, -1};
 }
 
-void GameManager::movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) {
+void GameManager::movePiece(int pieceIdx, GamePoint oldPos, GamePoint newPos) {
     GameStateSnapshot currentSnapshot = {
         enPassantTargetSquare,
         enPassantPawnIndex,
@@ -194,7 +95,7 @@ void GameManager::movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) {
     pieceIndexStack.push(pieceIdx);
 
     int capturedPieceActualIdx = -1;
-    SDL_Point capturedPieceActualOldPos = {-100, -100};
+    GamePoint capturedPieceActualOldPos = {-100, -100};
 
     if (std::abs(pieces[pieceIdx].index) == 6 &&
         std::abs(newX_grid - oldX_grid) == 1 &&
@@ -209,9 +110,9 @@ void GameManager::movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) {
         pieces[capturedPieceActualIdx].rect.y = -100;
     }
     else {
-        SDL_Rect newPosRect = {newPos.x, newPos.y, TILE_SIZE, TILE_SIZE};
+        GameRect newPosRect = {newPos.x, newPos.y, TILE_SIZE, TILE_SIZE};
         for (int i = 0; i < 32; ++i) {
-            if (SDL_HasIntersection(&pieces[i].rect, &newPosRect) && i != pieceIdx) {
+            if (pieces[i].rect.x == newPosRect.x && pieces[i].rect.y == newPosRect.y && i != pieceIdx) {
                 if ((pieces[i].index > 0 && pieces[pieceIdx].index < 0) ||
                     (pieces[i].index < 0 && pieces[pieceIdx].index > 0)) {
                     capturedPieceActualIdx = i;
@@ -229,8 +130,8 @@ void GameManager::movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) {
 
     if (std::abs(pieces[pieceIdx].index) == 5 && std::abs(newX_grid - oldX_grid) == 2) {
         int rookIdx = -1;
-        SDL_Point rookOldPos;
-        SDL_Point rookNewPos;
+        GamePoint rookOldPos;
+        GamePoint rookNewPos;
 
         if (newX_grid == 6) {
             if (pieces[pieceIdx].index == 5) {
@@ -327,7 +228,7 @@ void GameManager::movePiece(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) {
 
 void GameManager::undoLastMove() {
     if (gameStateSnapshots.empty()) {
-        SDL_Log("No moves to undo.");
+        std::cerr << "No moves to undo." << std::endl;
         return;
     }
 
@@ -344,17 +245,17 @@ void GameManager::undoLastMove() {
     blackRookQueensideMoved = prevState.blackRookQueensideMoved;
 
     if (pieceIndexStack.empty()) {
-        SDL_Log("Error: Piece stack empty during undo after state restoration.");
+        std::cerr << "Error: Piece stack empty during undo after state restoration." << std::endl;
         return;
     }
     int movedPieceIdx = pieceIndexStack.top(); pieceIndexStack.pop();
-    SDL_Point movedPieceNewPos = positionStack.top(); positionStack.pop();
-    SDL_Point movedPieceOldPos = positionStack.top(); positionStack.pop();
+    GamePoint movedPieceNewPos = positionStack.top(); positionStack.pop();
+    GamePoint movedPieceOldPos = positionStack.top(); positionStack.pop();
     pieces[movedPieceIdx].rect.x = movedPieceOldPos.x;
     pieces[movedPieceIdx].rect.y = movedPieceOldPos.y;
 
     int capturedPieceIdx = pieceIndexStack.top(); pieceIndexStack.pop();
-    SDL_Point capturedPieceOldPos = positionStack.top(); positionStack.pop();
+    GamePoint capturedPieceOldPos = positionStack.top(); positionStack.pop();
     if (capturedPieceIdx != -1) {
         pieces[capturedPieceIdx].rect.x = capturedPieceOldPos.x;
         pieces[capturedPieceIdx].rect.y = capturedPieceOldPos.y;
@@ -384,7 +285,7 @@ void GameManager::addPossibleMove(int x, int y) {
         possibleMoves[possibleMoveCount] = {x * TILE_SIZE + OFFSET.x, y * TILE_SIZE + OFFSET.y};
         possibleMoveCount++;
     } else {
-        SDL_Log("Warning: possibleMoves array full. Some moves might be missed.");
+        std::cerr << "Warning: possibleMoves array full. Some moves might be missed." << std::endl;
     }
 }
 
@@ -518,7 +419,7 @@ bool GameManager::isSquareAttacked(int targetX, int targetY, int attackingColor)
 }
 
 bool GameManager::isKingInCheck(int kingColor) const {
-    SDL_Point kingPos = getKingPosition(kingColor);
+    GamePoint kingPos = getKingPosition(kingColor);
     if (kingPos.x == -1 || kingPos.y == -1) {
         return false;
     }
@@ -531,7 +432,7 @@ bool GameManager::isKingInCheck(int kingColor) const {
     return isSquareAttacked(kingX, kingY, attackingColor);
 }
 
-SDL_Point GameManager::getKingPosition(int kingColor) const {
+GamePoint GameManager::getKingPosition(int kingColor) const {
     int kingIndex = kingColor * 5;
     for (int i = 0; i < 32; ++i) {
         if (pieces[i].index == kingIndex && (pieces[i].rect.x != -100 || pieces[i].rect.y != -100)) {
@@ -541,7 +442,7 @@ SDL_Point GameManager::getKingPosition(int kingColor) const {
     return {-1, -1};
 }
 
-SDL_Point GameManager::getRookPosition(int rookColor, bool isKingside) const {
+GamePoint GameManager::getRookPosition(int rookColor, bool isKingside) const {
     int rookIndex = rookColor * 1;
     int targetX = isKingside ? 7 : 0;
     int targetY = (rookColor == 1) ? 7 : 0;
@@ -560,7 +461,7 @@ SDL_Point GameManager::getRookPosition(int rookColor, bool isKingside) const {
 void GameManager::calculatePossibleMoves(int pieceIdx) {
     possibleMoveCount = 0;
 
-    SDL_Point currentPos = {pieces[pieceIdx].rect.x, pieces[pieceIdx].rect.y};
+    GamePoint currentPos = {pieces[pieceIdx].rect.x, pieces[pieceIdx].rect.y};
     int x = (currentPos.x - OFFSET.x) / TILE_SIZE;
     int y = (currentPos.y - OFFSET.y) / TILE_SIZE;
 
@@ -598,11 +499,11 @@ bool GameManager::checkAndAddMove(int pieceIdx, int newX, int newY, int pieceCol
         {-100, -100}
     };
 
-    SDL_Point originalPiecePos = {pieces[pieceIdx].rect.x, pieces[pieceIdx].rect.y};
-    SDL_Rect tempNewPosRect = {newX * TILE_SIZE + OFFSET.x, newY * TILE_SIZE + OFFSET.y, TILE_SIZE, TILE_SIZE};
+    GamePoint originalPiecePos = {pieces[pieceIdx].rect.x, pieces[pieceIdx].rect.y};
+    GameRect tempNewPosRect = {newX * TILE_SIZE + OFFSET.x, newY * TILE_SIZE + OFFSET.y, TILE_SIZE, TILE_SIZE};
 
     int capturedSimIdx = -1;
-    SDL_Point capturedSimOldPos = {-100, -100};
+    GamePoint capturedSimOldPos = {-100, -100};
 
     int oldX_grid = (originalPiecePos.x - OFFSET.x) / TILE_SIZE;
     int oldY_grid = (originalPiecePos.y - OFFSET.y) / TILE_SIZE;
@@ -622,7 +523,7 @@ bool GameManager::checkAndAddMove(int pieceIdx, int newX, int newY, int pieceCol
     }
     else {
         for (int p = 0; p < 32; ++p) {
-            if (SDL_HasIntersection(&pieces[p].rect, &tempNewPosRect) && p != pieceIdx) {
+            if (pieces[p].rect.x == tempNewPosRect.x && pieces[p].rect.y == tempNewPosRect.y && p != pieceIdx) {
                 if ((pieces[p].index > 0 && pieceColor < 0) || (pieces[p].index < 0 && pieceColor > 0)) {
                     capturedSimIdx = p;
                     capturedSimOldPos = {pieces[capturedSimIdx].rect.x, pieces[capturedSimIdx].rect.y};
@@ -635,8 +536,8 @@ bool GameManager::checkAndAddMove(int pieceIdx, int newX, int newY, int pieceCol
     }
 
     int simulatedRookIdx = -1;
-    SDL_Point simulatedRookOldPos = {-100, -100};
-    SDL_Point simulatedRookNewPos = {-100, -100};
+    GamePoint simulatedRookOldPos = {-100, -100};
+    GamePoint simulatedRookNewPos = {-100, -100};
 
     if (std::abs(pieces[pieceIdx].index) == 5 && std::abs(newX - oldX_grid) == 2) {
         if (newX == 6) {
@@ -888,11 +789,11 @@ void GameManager::findPawnMoves(int pieceIdx, int x, int y, int grid[9][9]) {
             std::abs(pieces[enPassantPawnIndex].index) == 6 &&
             pieces[enPassantPawnIndex].index * pieceColor < 0)
         {
-            SDL_Point originalPiecePos = {pieces[pieceIdx].rect.x, pieces[pieceIdx].rect.y};
-            SDL_Rect tempNewPosRect = {(x - 1) * TILE_SIZE + OFFSET.x, (y + direction) * TILE_SIZE + OFFSET.y, TILE_SIZE, TILE_SIZE};
+            GamePoint originalPiecePos = {pieces[pieceIdx].rect.x, pieces[pieceIdx].rect.y};
+            GameRect tempNewPosRect = {(x - 1) * TILE_SIZE + OFFSET.x, (y + direction) * TILE_SIZE + OFFSET.y, TILE_SIZE, TILE_SIZE};
 
             int capturedSimIdx = enPassantPawnIndex;
-            SDL_Point capturedSimOldPos = {pieces[capturedSimIdx].rect.x, pieces[capturedSimIdx].rect.y};
+            GamePoint capturedSimOldPos = {pieces[capturedSimIdx].rect.x, pieces[capturedSimIdx].rect.y};
             pieces[capturedSimIdx].rect.x = -100;
             pieces[capturedSimIdx].rect.y = -100;
 
@@ -915,11 +816,11 @@ void GameManager::findPawnMoves(int pieceIdx, int x, int y, int grid[9][9]) {
             std::abs(pieces[enPassantPawnIndex].index) == 6 &&
             pieces[enPassantPawnIndex].index * pieceColor < 0)
         {
-            SDL_Point originalPiecePos = {pieces[pieceIdx].rect.x, pieces[pieceIdx].rect.y};
-            SDL_Rect tempNewPosRect = {(x + 1) * TILE_SIZE + OFFSET.x, (y + direction) * TILE_SIZE + OFFSET.y, TILE_SIZE, TILE_SIZE};
+            GamePoint originalPiecePos = {pieces[pieceIdx].rect.x, pieces[pieceIdx].rect.y};
+            GameRect tempNewPosRect = {(x + 1) * TILE_SIZE + OFFSET.x, (y + direction) * TILE_SIZE + OFFSET.y, TILE_SIZE, TILE_SIZE};
 
             int capturedSimIdx = enPassantPawnIndex;
-            SDL_Point capturedSimOldPos = {pieces[capturedSimIdx].rect.x, pieces[capturedSimIdx].rect.y};
+            GamePoint capturedSimOldPos = {pieces[capturedSimIdx].rect.x, pieces[capturedSimIdx].rect.y};
             pieces[capturedSimIdx].rect.x = -100;
             pieces[capturedSimIdx].rect.y = -100;
 
@@ -940,255 +841,6 @@ void GameManager::findPawnMoves(int pieceIdx, int x, int y, int grid[9][9]) {
     }
 }
 
-void GameManager::renderPieces() {
-    for (int i = 0; i < 32; ++i) {
-        if (i == selectedPieceIdx && isDragging) {
-            continue;
-        }
-        if (pieces[i].rect.x != -100 || pieces[i].rect.y != -100) {
-            int xTex = std::abs(pieces[i].index) - 1;
-            int yTex = pieces[i].index > 0 ? 1 : 0;
-            SDL_Rect srcRect = {xTex * TILE_SIZE, yTex * TILE_SIZE, TILE_SIZE, TILE_SIZE};
-
-            SDL_RenderCopy(renderer, pieces[i].texture, &srcRect, &pieces[i].rect);
-        }
-    }
-}
-
-void GameManager::playGame() {
-    initializeSDL();
-    createPieces();
-
-    PlayerColor currentPlayerTurn = PlayerColor::White;
-
-    SDL_Event e;
-    bool quit = false;
-
-    while (!quit) {
-        while (SDL_PollEvent(&e) != 0) {
-            if (e.type == SDL_QUIT) {
-                quit = true;
-            }
-            if (e.type == SDL_KEYDOWN) {
-                if (e.key.keysym.sym == SDLK_BACKSPACE) {
-                    undoLastMove();
-                    aiLastMovedFrom = {-1, -1};
-                    aiLastMovedTo = {-1, -1};
-                    currentPlayerTurn = (currentPlayerTurn == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
-                    selectedPieceIdx = -1;
-                    isDragging = false;
-                    hoveredPieceIdx = -1;
-                    possibleMoveCount = 0;
-                }
-            }
-            if (e.type == SDL_MOUSEMOTION) {
-                if (isDragging && selectedPieceIdx != -1) {
-                    pieces[selectedPieceIdx].rect.x = e.motion.x - dragOffset.x;
-                    pieces[selectedPieceIdx].rect.y = e.motion.y - dragOffset.y;
-                } else if (selectedPieceIdx == -1) {
-                    SDL_Point mousePos = {e.motion.x, e.motion.y};
-                    int currentHovered = -1;
-                    int startIdx = (currentPlayerTurn == PlayerColor::White) ? 16 : 0;
-                    int endIdx = (currentPlayerTurn == PlayerColor::White) ? 32 : 16;
-
-                    for (int i = startIdx; i < endIdx; ++i) {
-                        if (pieces[i].rect.x != -100 || pieces[i].rect.y != -100) {
-                            SDL_Rect mouseRect = {mousePos.x, mousePos.y, 1, 1};
-                            if (SDL_HasIntersection(&pieces[i].rect, &mouseRect)) {
-                                currentHovered = i;
-                                break;
-                            }
-                        }
-                    }
-
-                    if (currentHovered != hoveredPieceIdx) {
-                        hoveredPieceIdx = currentHovered;
-                        if (hoveredPieceIdx != -1) {
-                            calculatePossibleMoves(hoveredPieceIdx);
-                        } else {
-                            possibleMoveCount = 0;
-                        }
-                    }
-                }
-            }
-            if (e.type == SDL_MOUSEBUTTONDOWN) {
-                if (e.button.button == SDL_BUTTON_LEFT) {
-                    SDL_Point mousePos = {e.button.x, e.button.y};
-
-                    if (selectedPieceIdx == -1) {
-                        int startIdx = (currentPlayerTurn == PlayerColor::White) ? 16 : 0;
-                        int endIdx = (currentPlayerTurn == PlayerColor::White) ? 32 : 16;
-
-                        for (int i = startIdx; i < endIdx; ++i) {
-                            if (pieces[i].rect.x != -100 || pieces[i].rect.y != -100) {
-                                SDL_Rect mouseRect = {mousePos.x, mousePos.y, 1, 1};
-                                if (SDL_HasIntersection(&pieces[i].rect, &mouseRect)) {
-                                    selectedPieceIdx = i;
-                                    selectedPieceOriginalPos = {pieces[selectedPieceIdx].rect.x, pieces[selectedPieceIdx].rect.y};
-                                    dragOffset = {mousePos.x - pieces[selectedPieceIdx].rect.x, mousePos.y - pieces[selectedPieceIdx].rect.y};
-                                    isDragging = true;
-                                    calculatePossibleMoves(selectedPieceIdx);
-                                    hoveredPieceIdx = -1;
-                                    break;
-                                }
-                            }
-                        }
-                    } else {
-                        int destX = (mousePos.x - OFFSET.x) / TILE_SIZE;
-                        int destY = (mousePos.y - OFFSET.y) / TILE_SIZE;
-                        SDL_Point newMovePos = {destX * TILE_SIZE + OFFSET.x, destY * TILE_SIZE + OFFSET.y};
-
-                        bool validMove = false;
-                        for (int i = 0; i < possibleMoveCount; ++i) {
-                            if (possibleMoves[i].x == newMovePos.x && possibleMoves[i].y == newMovePos.y) {
-                                validMove = true;
-                                break;
-                            }
-                        }
-
-                        if (validMove) {
-                            movePiece(selectedPieceIdx, selectedPieceOriginalPos, newMovePos);
-                            aiLastMovedFrom = {-1, -1};
-                            aiLastMovedTo = {-1, -1};
-
-                            int currentEvaluation = ai->getEvaluation(this);
-                            SDL_Log("After %s make a move, the current evaluation point is %+d",
-                                    (currentPlayerTurn == PlayerColor::White ? "White" : "Black"), currentEvaluation);
-
-                            currentPlayerTurn = (currentPlayerTurn == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
-                        } else {
-                            pieces[selectedPieceIdx].rect.x = selectedPieceOriginalPos.x;
-                            pieces[selectedPieceIdx].rect.y = selectedPieceOriginalPos.y;
-                        }
-                        selectedPieceIdx = -1;
-                        isDragging = false;
-                        possibleMoveCount = 0;
-                        hoveredPieceIdx = -1;
-                    }
-                }
-            }
-            if (e.type == SDL_MOUSEBUTTONUP) {
-                if (e.button.button == SDL_BUTTON_LEFT && isDragging) {
-                    SDL_Point mouseReleasePos = {e.button.x, e.button.y};
-                    int destX = (mouseReleasePos.x - OFFSET.x) / TILE_SIZE;
-                    int destY = (mouseReleasePos.y - OFFSET.y) / TILE_SIZE;
-                    SDL_Point newMovePos = {destX * TILE_SIZE + OFFSET.x, destY * TILE_SIZE + OFFSET.y};
-
-                    bool validMove = false;
-                    for (int i = 0; i < possibleMoveCount; ++i) {
-                        if (possibleMoves[i].x == newMovePos.x && possibleMoves[i].y == newMovePos.y) {
-                            validMove = true;
-                            break;
-                        }
-                    }
-
-                    if (validMove) {
-                        movePiece(selectedPieceIdx, selectedPieceOriginalPos, newMovePos);
-                        aiLastMovedFrom = {-1, -1};
-                        aiLastMovedTo = {-1, -1};
-
-                        int currentEvaluation = ai->getEvaluation(this);
-                        SDL_Log("After %s make a move, the current evaluation point is %+d",
-                                (currentPlayerTurn == PlayerColor::White ? "White" : "Black"), currentEvaluation);
-
-                        currentPlayerTurn = (currentPlayerTurn == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
-                    } else {
-                        if (selectedPieceIdx != -1) {
-                            pieces[selectedPieceIdx].rect.x = selectedPieceOriginalPos.x;
-                            pieces[selectedPieceIdx].rect.y = selectedPieceOriginalPos.y;
-                        }
-                    }
-                    selectedPieceIdx = -1;
-                    isDragging = false;
-                    possibleMoveCount = 0;
-                    hoveredPieceIdx = -1;
-                }
-            }
-        }
-
-        PlayerColor AI_COLOR = (HUMAN_PLAYER_COLOR == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
-        if (currentPlayerTurn == AI_COLOR) {
-            SDL_Log("Thinking...");
-            // Removed the SDL_Delay loop here
-            SDL_Log("thinking completed, its the player's turn");
-
-            bool isMaximizingPlayer = (AI_COLOR == PlayerColor::White);
-            SDL_Point newAiPos = ai->getBestMove(this, isMaximizingPlayer);
-
-            int aiPieceIdx = pieceIndexStack.top();
-            pieceIndexStack.pop();
-            SDL_Point oldAiPos = positionStack.top();
-            positionStack.pop();
-
-            movePiece(aiPieceIdx, oldAiPos, newAiPos);
-            
-            aiLastMovedFrom = oldAiPos;
-            aiLastMovedTo = newAiPos;
-
-            int currentEvaluation = ai->getEvaluation(this);
-            SDL_Log("After %s make a move, the current evaluation point is %+d",
-                    (AI_COLOR == PlayerColor::White ? "White" : "Black"), currentEvaluation);
-
-            currentPlayerTurn = (HUMAN_PLAYER_COLOR == PlayerColor::White) ? PlayerColor::White : PlayerColor::Black;
-
-            selectedPieceIdx = -1;
-            isDragging = false;
-            hoveredPieceIdx = -1;
-            possibleMoveCount = 0;
-        }
-
-        SDL_RenderClear(renderer);
-
-        SDL_RenderCopy(renderer, boardTexture, NULL, NULL);
-
-        if (selectedPieceIdx != -1 || hoveredPieceIdx != -1) {
-            for (int i = 0; i < possibleMoveCount; ++i) {
-                SDL_Rect destRect = {possibleMoves[i].x, possibleMoves[i].y, TILE_SIZE, TILE_SIZE};
-                SDL_RenderCopy(renderer, positiveMoveTexture, NULL, &destRect);
-            }
-        }
-
-        if (aiLastMovedFrom.x != -1 && aiLastMovedTo.x != -1) {
-            SDL_Rect fromRect = {aiLastMovedFrom.x, aiLastMovedFrom.y, TILE_SIZE, TILE_SIZE};
-            SDL_Rect toRect = {aiLastMovedTo.x, aiLastMovedTo.y, TILE_SIZE, TILE_SIZE};
-            SDL_RenderCopy(renderer, blueTexture, NULL, &fromRect);
-            SDL_RenderCopy(renderer, blueTexture, NULL, &toRect);
-        }
-
-
-        int whiteKingColor = 1;
-        if (isKingInCheck(whiteKingColor)) {
-            SDL_Point kingPos = getKingPosition(whiteKingColor);
-            if (kingPos.x != -1 && kingPos.y != -1) {
-                SDL_Rect destRect = {kingPos.x, kingPos.y, TILE_SIZE, TILE_SIZE};
-                SDL_RenderCopy(renderer, redTexture, NULL, &destRect);
-            }
-        }
-
-        int blackKingColor = -1;
-        if (isKingInCheck(blackKingColor)) {
-            SDL_Point kingPos = getKingPosition(blackKingColor);
-            if (kingPos.x != -1 && kingPos.y != -1) {
-                SDL_Rect destRect = {kingPos.x, kingPos.y, TILE_SIZE, TILE_SIZE};
-                SDL_RenderCopy(renderer, redTexture, NULL, &destRect);
-            }
-        }
-
-        renderPieces();
-
-        if (isDragging && selectedPieceIdx != -1) {
-            int xTex = std::abs(pieces[selectedPieceIdx].index) - 1;
-            int yTex = pieces[selectedPieceIdx].index > 0 ? 1 : 0;
-            SDL_Rect srcRect = {xTex * TILE_SIZE, yTex * TILE_SIZE, TILE_SIZE, TILE_SIZE};
-            SDL_RenderCopy(renderer, pieces[selectedPieceIdx].texture, &srcRect, &pieces[selectedPieceIdx].rect);
-        }
-
-        SDL_RenderPresent(renderer);
-    }
-
-    cleanUpSDL();
-}
-
 char GameManager::toFile(int col) const {
     return 'a' + col;
 }
@@ -1197,14 +849,14 @@ int GameManager::toRank(int row) const {
     return 8 - row;
 }
 
-SDL_Point GameManager::algebraicToSquare(const std::string& algebraic) const {
+GamePoint GameManager::algebraicToSquare(const std::string& algebraic) const {
     if (algebraic.length() < 2) return {-1, -1};
     int col = algebraic[0] - 'a';
     int row = 8 - (algebraic[1] - '0');
     return {col * TILE_SIZE + OFFSET.x, row * TILE_SIZE + OFFSET.y};
 }
 
-int GameManager::getPieceIndexAt(SDL_Point pixelPos) const {
+int GameManager::getPieceIndexAt(GamePoint pixelPos) const {
     for (int i = 0; i < 32; ++i) {
         if (pieces[i].rect.x == pixelPos.x && pieces[i].rect.y == pixelPos.y) {
             return i;
@@ -1214,7 +866,7 @@ int GameManager::getPieceIndexAt(SDL_Point pixelPos) const {
 }
 
 int GameManager::getPieceIndexAtGrid(int row, int col) const {
-    SDL_Point pixelPos = {col * TILE_SIZE + OFFSET.x, row * TILE_SIZE + OFFSET.y};
+    GamePoint pixelPos = {col * TILE_SIZE + OFFSET.x, row * TILE_SIZE + OFFSET.y};
     return getPieceIndexAt(pixelPos);
 }
 
@@ -1237,8 +889,6 @@ void GameManager::setBoardFromFEN(const std::string& fen) {
     blackRookQueensideMoved = false;
     enPassantTargetSquare = {-1, -1};
     enPassantPawnIndex = -1;
-    aiLastMovedFrom = {-1, -1};
-    aiLastMovedTo = {-1, -1};
 
     std::stringstream ss(fen);
     std::string boardPart;
@@ -1276,7 +926,6 @@ void GameManager::setBoardFromFEN(const std::string& fen) {
             }
 
             if (pieceIndex != 0) {
-                pieces[currentPieceK].texture = figuresTexture;
                 pieces[currentPieceK].index = pieceColor * pieceIndex;
                 pieces[currentPieceK].rect = {col * TILE_SIZE + OFFSET.x, row * TILE_SIZE + OFFSET.y, TILE_SIZE, TILE_SIZE};
                 pieces[currentPieceK].cost = pieceColor * pieceValue;
@@ -1287,7 +936,7 @@ void GameManager::setBoardFromFEN(const std::string& fen) {
     }
 }
 
-std::string GameManager::convertMoveToAlgebraic(int pieceIdx, SDL_Point oldPos, SDL_Point newPos) const {
+std::string GameManager::convertMoveToAlgebraic(int pieceIdx, GamePoint oldPos, GamePoint newPos) const {
     std::string moveStr = "";
     moveStr += toFile((oldPos.x - OFFSET.x) / TILE_SIZE);
     moveStr += std::to_string(toRank((oldPos.y - OFFSET.y) / TILE_SIZE));
@@ -1306,7 +955,7 @@ std::string GameManager::convertMoveToAlgebraic(int pieceIdx, SDL_Point oldPos, 
 
 void GameManager::applyUCIStringMove(const std::string& moveStr, PlayerColor currentPlayer) {
     if (moveStr.length() < 4) {
-        SDL_Log("Invalid UCI move string: %s", moveStr.c_str());
+        std::cerr << "Invalid UCI move string: " << moveStr << std::endl;
         return;
     }
 
@@ -1314,13 +963,13 @@ void GameManager::applyUCIStringMove(const std::string& moveStr, PlayerColor cur
     std::string newSquareStr = moveStr.substr(2, 2);
     char promotionChar = (moveStr.length() == 5) ? moveStr[4] : ' ';
 
-    SDL_Point oldPixelPos = algebraicToSquare(oldSquareStr);
-    SDL_Point newPixelPos = algebraicToSquare(newSquareStr);
+    GamePoint oldPixelPos = algebraicToSquare(oldSquareStr);
+    GamePoint newPixelPos = algebraicToSquare(newSquareStr);
 
     int pieceIdx = getPieceIndexAt(oldPixelPos);
 
     if (pieceIdx == -1) {
-        SDL_Log("Could not find piece at %s for move %s", oldSquareStr.c_str(), moveStr.c_str());
+        std::cerr << "Could not find piece at " << oldSquareStr << " for move " << moveStr << std::endl;
         return;
     }
 
@@ -1349,7 +998,4 @@ void GameManager::applyUCIStringMove(const std::string& moveStr, PlayerColor cur
     else {
         movePiece(pieceIdx, oldPixelPos, newPixelPos);
     }
-
-    aiLastMovedFrom = oldPixelPos;
-    aiLastMovedTo = newPixelPos;
 }

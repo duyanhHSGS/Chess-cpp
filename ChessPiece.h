@@ -1,11 +1,20 @@
 #ifndef CHESS_PIECE_H
 #define CHESS_PIECE_H
 
-#include <SDL.h>
+struct GamePoint {
+    int x;
+    int y;
+};
+
+struct GameRect {
+    int x;
+    int y;
+    int w;
+    int h;
+};
 
 struct ChessPiece {
-    SDL_Texture* texture;
-    SDL_Rect rect;
+    GameRect rect;
     int index;
     int cost;
 };
