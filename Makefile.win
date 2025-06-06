@@ -5,9 +5,9 @@ CPP      = x86_64-w64-mingw32-g++.exe
 CC       = x86_64-w64-mingw32-gcc.exe
 WINDRES  = windres.exe
 RES      = obj/Carolyna_private.res
-OBJ      = obj/main.o obj/ChessAI.o obj/GameManager.o $(RES)
-LINKOBJ  = obj/main.o obj/ChessAI.o obj/GameManager.o $(RES)
-LIBS     = -L"C:/TDM-GCC-64/lib" -L"C:/TDM-GCC-64/x86_64-w64-mingw32/lib" -static-libgcc -lmingw32 -lSDL2main -lSDL2 -lSDL2_image
+OBJ      = obj/main.o obj/ChessAI.o obj/GameManager.o obj/ChessBoard.o obj/ChessBitboardUtils.o $(RES)
+LINKOBJ  = obj/main.o obj/ChessAI.o obj/GameManager.o obj/ChessBoard.o obj/ChessBitboardUtils.o $(RES)
+LIBS     = -L"C:/TDM-GCC-64/lib" -L"C:/TDM-GCC-64/x86_64-w64-mingw32/lib" -static-libgcc
 INCS     = 
 CXXINCS  = -I"C:/TDM-GCC-64/x86_64-w64-mingw32/include" -I"C:/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/10.3.0/include" -I"C:/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/10.3.0/include/c++" -I"C:/TDM-GCC-64/include"
 BIN      = Carolyna.exe
@@ -33,6 +33,12 @@ obj/ChessAI.o: ChessAI.cpp
 
 obj/GameManager.o: GameManager.cpp
 	$(CPP) -c GameManager.cpp -o obj/GameManager.o $(CXXFLAGS)
+
+obj/ChessBoard.o: ChessBoard.cpp
+	$(CPP) -c ChessBoard.cpp -o obj/ChessBoard.o $(CXXFLAGS)
+
+obj/ChessBitboardUtils.o: ChessBitboardUtils.cpp
+	$(CPP) -c ChessBitboardUtils.cpp -o obj/ChessBitboardUtils.o $(CXXFLAGS)
 
 obj/Carolyna_private.res: Carolyna_private.rc 
 	$(WINDRES) -i Carolyna_private.rc --input-format=rc -o obj/Carolyna_private.res -O coff 

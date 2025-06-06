@@ -3,18 +3,7 @@
 
 #include <cstdint> // For uint64_t
 #include <string>  // For std::string
-
-// Define PlayerColor: Represents the two sides in chess.
-enum PlayerColor {
-    Black = -1,
-    White = 1
-};
-
-// Represents a square on the board using 0-7 for x and y (grid coordinates).
-struct GamePoint {
-    int x;
-    int y;
-};
+#include "Types.h" // Include our new types header for PlayerColor, GamePoint, PieceTypeIndex
 
 // Forward declaration of Move struct (defined in Move.h).
 struct Move;
@@ -101,7 +90,7 @@ struct ChessBoard {
     bool is_king_in_check(PlayerColor king_color) const;
     // Helper to get the square index (0-63) of a specific piece type and color.
     // Returns a special value (e.g., 64) if piece is not found.
-    int get_piece_square_index(int piece_type_and_color_index) const;
+    int get_piece_square_index(PieceTypeIndex piece_type_idx, PlayerColor piece_color) const;
 
     // Zobrist-related Methods (grouped at the bottom for readability):
     // Initializes the static Zobrist keys (should be called once at program startup).
@@ -111,7 +100,7 @@ struct ChessBoard {
     uint64_t calculate_zobrist_hash_from_scratch() const;
     // Helper to toggle a piece's hash contribution when it moves or is captured.
     // This is used for incremental hash updates.
-    void toggle_zobrist_piece(int piece_type_and_color_index, int square_idx);
+    void toggle_zobrist_piece(PieceTypeIndex piece_type_idx, PlayerColor piece_color, int square_idx);
 };
 
 #endif // CHESS_BOARD_H
