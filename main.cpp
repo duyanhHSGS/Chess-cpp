@@ -1,6 +1,6 @@
 #include "GameManager.h"
 #include "ChessAI.h"
-#include "Constants.h" // Ensure PlayerColor enum is defined here
+#include "Constants.h"
 
 #include <iostream>
 #include <string>

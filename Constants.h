@@ -1,44 +1,21 @@
+// Constants.h
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
-#include "ChessPiece.h"
-#include <cstdint> // For uint64_t
+#include <cstdint> // For uint8_t
+#include "ChessBoard.h" // Include ChessBoard.h to use the ChessBoard struct
 
-const int TILE_SIZE = 56;
-const GamePoint OFFSET = {28, 28};
+// --- Player and AI Constants ---
+// Define the search depth for the Alpha-Beta pruning algorithm
+// Higher depth means stronger AI but more computation time
+const int AI_SEARCH_DEPTH = 3;
 
-inline int initial_board[8][8] = {
-    {-1, -2, -3, -4, -5, -3, -2, -1},
-    {-6, -6, -6, -6, -6, -6, -6, -6},
-    {0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0},
-    {0, 0, 0, 0, 0, 0, 0, 0},
-    {6, 6, 6, 6, 6, 6, 6, 6},
-    {1, 2, 3, 4, 5, 3, 2, 1}
-};
+// Optional: Number of CPU cores/threads to use for parallel search (e.g., for root moves)
+const uint8_t NUMBER_OF_CORES_USED = 1; 
 
-const int AI_SEARCH_DEPTH = 5;
-const int AI_ENDGAME_SEARCH_DEPTH = 7;
-
-enum class PlayerColor {
-    White = 1,
-    Black = -1
-};
-
-const PlayerColor HUMAN_PLAYER_COLOR = PlayerColor::White;
-
-// Zobrist Hashing Constants
-// 6 piece types * 2 colors * 64 squares = 12 * 64 = 768
-// + 1 for black to move
-// + 16 for castling rights (2^4 possibilities)
-// + 8 for en passant file (a-h)
-// Total unique random keys needed
-const int ZOBRIST_PIECE_SQUARE_KEYS_COUNT = 12 * 64; // 6 piece types, 2 colors, 64 squares
-const int ZOBRIST_CASTLING_KEYS_COUNT = 16;         // 2^4 = 16 combinations of castling rights
-const int ZOBRIST_EN_PASSANT_KEYS_COUNT = 8;        // 8 files for en passant target square
-
-// Transposition Table Size (power of 2 for efficient modulo)
-const uint64_t TT_SIZE = 1024 * 1024; // 1 million entries
+// --- Initial Game State ---
+// An initial instance of the ChessBoard struct representing the standard starting position.
+// This assumes the ChessBoard() default constructor sets the board to startpos.
+const ChessBoard INITIAL_BOARD_STATE = ChessBoard();
 
 #endif // CONSTANTS_H

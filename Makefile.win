@@ -1,15 +1,16 @@
-# Project: NeuralNetwork
+# Project: Carolyna
 # Makefile created by Embarcadero Dev-C++ 6.3
 
-CPP      = g++.exe
-CC       = gcc.exe
+CPP      = x86_64-w64-mingw32-g++.exe
+CC       = x86_64-w64-mingw32-gcc.exe
 WINDRES  = windres.exe
-OBJ      = obj/main.o obj/ChessAI.o obj/GameManager.o
-LINKOBJ  = obj/main.o obj/ChessAI.o obj/GameManager.o
-LIBS     = -L"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/lib" -L"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/x86_64-w64-mingw32/lib" -static-libgcc -L"C:/Users/Laptop/Desktop/CodeProjects/NeuralNetwork/SDL2-2.32.0/x86_64-w64-mingw32/lib" -L"C:/Users/Laptop/Desktop/CodeProjects/NeuralNetwork/SDL2_image-2.8.5/x86_64-w64-mingw32/lib" -lmingw32 -lSDL2main -lSDL2 -lSDL2_image
-INCS     = -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/include" -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/x86_64-w64-mingw32/include" -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/9.2.0/include" -I"C:/Users/Laptop/Desktop/CodeProjects/NeuralNetwork/SDL2-2.32.0/x86_64-w64-mingw32/include/SDL2" -I"C:/Users/Laptop/Desktop/CodeProjects/NeuralNetwork/SDL2_image-2.8.5/x86_64-w64-mingw32/include/SDL2"
-CXXINCS  = -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/include" -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/x86_64-w64-mingw32/include" -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/9.2.0/include" -I"C:/Program Files (x86)/Embarcadero/Dev-Cpp/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/9.2.0/include/c++" -I"C:/Users/Laptop/Desktop/CodeProjects/NeuralNetwork/SDL2-2.32.0/x86_64-w64-mingw32/include/SDL2" -I"C:/Users/Laptop/Desktop/CodeProjects/NeuralNetwork/SDL2_image-2.8.5/x86_64-w64-mingw32/include/SDL2"
-BIN      = NeuralNetwork.exe
+RES      = obj/Carolyna_private.res
+OBJ      = obj/main.o obj/ChessAI.o obj/GameManager.o $(RES)
+LINKOBJ  = obj/main.o obj/ChessAI.o obj/GameManager.o $(RES)
+LIBS     = -L"C:/TDM-GCC-64/lib" -L"C:/TDM-GCC-64/x86_64-w64-mingw32/lib" -static-libgcc -lmingw32 -lSDL2main -lSDL2 -lSDL2_image
+INCS     = 
+CXXINCS  = -I"C:/TDM-GCC-64/x86_64-w64-mingw32/include" -I"C:/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/10.3.0/include" -I"C:/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/10.3.0/include/c++" -I"C:/TDM-GCC-64/include"
+BIN      = Carolyna.exe
 CXXFLAGS = $(CXXINCS) -std=c++17
 CFLAGS   = $(INCS) 
 DEL      = C:\Program Files (x86)\Embarcadero\Dev-Cpp\DevCpp.exe INTERNAL_DEL
@@ -32,3 +33,7 @@ obj/ChessAI.o: ChessAI.cpp
 
 obj/GameManager.o: GameManager.cpp
 	$(CPP) -c GameManager.cpp -o obj/GameManager.o $(CXXFLAGS)
+
+obj/Carolyna_private.res: Carolyna_private.rc 
+	$(WINDRES) -i Carolyna_private.rc --input-format=rc -o obj/Carolyna_private.res -O coff 
+
