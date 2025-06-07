@@ -39,6 +39,7 @@ bool MoveGenerator::is_square_attacked(int square_idx, PlayerColor attacking_col
     // Check for attacks from Bishops and Queens (diagonal sliding attacks).
     // Again, `occupied_squares` is needed for blocking.
     uint64_t bishop_queen_attackers = enemy_bishops_bb | enemy_queens_bb;
+    
     if (ChessBitboardUtils::is_bishop_queen_attacked_by(square_idx, bishop_queen_attackers, board.occupied_squares)) return true;
 
     return false; // Square is not attacked
@@ -125,8 +126,8 @@ void MoveGenerator::generate_pawn_moves(const ChessBoard& board, int square_idx,
             pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::BISHOP, false, false, false, false);
             pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::KNIGHT, false, false, false, false);
         } else {
-            // Normal capture
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, true);
+            // Normal capture - FIX: is_promotion should be false
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, false);
         }
     }
 
@@ -159,8 +160,8 @@ void MoveGenerator::generate_pawn_moves(const ChessBoard& board, int square_idx,
             pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::BISHOP, false, false, false, false);
             pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::KNIGHT, false, false, false, false);
         } else {
-            // Normal capture
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, true);
+            // Normal capture - FIX: is_promotion should be false
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, false);
         }
     }
 
@@ -171,11 +172,13 @@ void MoveGenerator::generate_pawn_moves(const ChessBoard& board, int square_idx,
         
         // Check if pawn can capture en passant to the left
         if (file - 1 == ep_file && ((color == PlayerColor::White && rank == 4 && ep_rank == 5) || (color == PlayerColor::Black && rank == 3 && ep_rank == 2))) {
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ep_file, ep_rank}, PieceTypeIndex::PAWN, PieceTypeIndex::PAWN, true, PieceTypeIndex::NONE, false, false, true, false);
+            // FIX: is_promotion should be false
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ep_file, ep_rank}, PieceTypeIndex::PAWN, PieceTypeIndex::PAWN, false, PieceTypeIndex::NONE, false, false, true, false);
         }
         // Check if pawn can capture en passant to the right
         if (file + 1 == ep_file && ((color == PlayerColor::White && rank == 4 && ep_rank == 5) || (color == PlayerColor::Black && rank == 3 && ep_rank == 2))) {
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ep_file, ep_rank}, PieceTypeIndex::PAWN, PieceTypeIndex::PAWN, true, PieceTypeIndex::NONE, false, false, true, false);
+            // FIX: is_promotion should be false
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ep_file, ep_rank}, PieceTypeIndex::PAWN, PieceTypeIndex::PAWN, false, PieceTypeIndex::NONE, false, false, true, false);
         }
     }
 }
@@ -197,9 +200,9 @@ void MoveGenerator::generate_knight_moves(const ChessBoard& board, int square_id
         
         // Determine if it's a capture.
         PieceTypeIndex captured_type = PieceTypeIndex::NONE;
-        bool is_capture = false;
+        // The `is_capture` flag is determined by whether the target square is occupied by an enemy piece.
+        // We removed `is_capture` from `Move` constructor as it was incorrectly setting `is_promotion`.
         if (ChessBitboardUtils::test_bit(board.occupied_squares, target_sq)) { // Check if target is occupied by any piece
-            is_capture = true;
             // Determine which enemy piece is on target_sq
             if (color == PlayerColor::White) { // White capturing black piece
                 if (ChessBitboardUtils::test_bit(board.black_pawns, target_sq)) captured_type = PieceTypeIndex::PAWN;
@@ -216,9 +219,12 @@ void MoveGenerator::generate_knight_moves(const ChessBoard& board, int square_id
             }
         }
         
+        // Corrected: Removed `is_capture` from the `promotion` parameter slot.
+        // The Move constructor will correctly deduce if it's a capture based on `captured_type`.
+        // `is_promotion` and `promotion_piece_type_idx` will now correctly default to false/NONE.
         pseudo_legal_moves.emplace_back(GamePoint{ChessBitboardUtils::square_to_file(square_idx), ChessBitboardUtils::square_to_rank(square_idx)},
                                          GamePoint{ChessBitboardUtils::square_to_file(target_sq), ChessBitboardUtils::square_to_rank(target_sq)},
-                                         PieceTypeIndex::KNIGHT, captured_type, is_capture);
+                                         PieceTypeIndex::KNIGHT, captured_type);
     }
 }
 
@@ -260,7 +266,7 @@ void MoveGenerator::generate_sliding_piece_moves_helper(const ChessBoard& board,
 
             // Determine if it's a capture.
             PieceTypeIndex captured_type = PieceTypeIndex::NONE;
-            bool is_capture = false;
+            bool is_capture = false; // This flag is not directly used in the Move constructor anymore for non-pawn moves
             if (ChessBitboardUtils::test_bit(enemy_occupied_squares, target_sq)) {
                 is_capture = true;
                 // Determine which enemy piece is on target_sq
@@ -281,9 +287,12 @@ void MoveGenerator::generate_sliding_piece_moves_helper(const ChessBoard& board,
                 }
             }
 
+            // Corrected: Removed `is_capture` from the `promotion` parameter slot.
+            // The Move constructor will correctly deduce if it's a capture based on `captured_type`.
+            // `is_promotion` and `promotion_piece_type_idx` will now correctly default to false/NONE.
             pseudo_legal_moves.emplace_back(GamePoint{ChessBitboardUtils::square_to_file(square_idx), ChessBitboardUtils::square_to_rank(square_idx)},
                                              GamePoint{ChessBitboardUtils::square_to_file(target_sq), ChessBitboardUtils::square_to_rank(target_sq)},
-                                             piece_type, captured_type, is_capture);
+                                             piece_type, captured_type);
 
             if (is_capture) {
                 // If a piece is captured, cannot move further in this direction.
@@ -325,9 +334,10 @@ void MoveGenerator::generate_king_moves(const ChessBoard& board, int square_idx,
         
         // Determine if it's a capture.
         PieceTypeIndex captured_type = PieceTypeIndex::NONE;
-        bool is_capture = false;
+        // The `is_capture` flag is determined by whether the target square is occupied by an enemy piece.
+        // The `Move` constructor defaults `is_promotion` to `false`, so no need to pass a false boolean.
         if (ChessBitboardUtils::test_bit(board.occupied_squares, target_sq)) {
-            is_capture = true;
+            // If target square is occupied, it's a capture.
             // Determine which enemy piece is on target_sq
             if (color == PlayerColor::White) {
                 if (ChessBitboardUtils::test_bit(board.black_pawns, target_sq)) captured_type = PieceTypeIndex::PAWN;
@@ -344,9 +354,12 @@ void MoveGenerator::generate_king_moves(const ChessBoard& board, int square_idx,
             }
         }
         
+        // Corrected: Removed 'is_capture' from the 'promotion' parameter slot.
+        // The Move constructor will correctly deduce if it's a capture based on 'captured_type'.
+        // 'is_promotion' and 'promotion_piece_type_idx' will now correctly default to false/NONE.
         pseudo_legal_moves.emplace_back(GamePoint{ChessBitboardUtils::square_to_file(square_idx), ChessBitboardUtils::square_to_rank(square_idx)},
                                          GamePoint{ChessBitboardUtils::square_to_file(target_sq), ChessBitboardUtils::square_to_rank(target_sq)},
-                                         PieceTypeIndex::KING, captured_type, is_capture);
+                                         PieceTypeIndex::KING, captured_type);
     }
 
     // --- Castling Moves ---

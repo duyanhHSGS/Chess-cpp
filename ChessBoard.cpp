@@ -7,6 +7,7 @@
 #include <sstream>   // For std::stringstream to parse FEN strings
 #include <cctype>    // For std::isdigit, std::isupper, std::tolower for FEN parsing
 #include <algorithm> // For std::reverse (if used, not currently but commonly in string operations)
+// #include <iostream>  // COMMENTED OUT: For std::cerr debug output
 
 // ============================================================================
 // Static Member Definitions (Zobrist Keys)
@@ -220,6 +221,10 @@ void ChessBoard::set_from_fen(const std::string& fen) {
     // 8. Calculate the Zobrist Hash from the newly set board state.
     // This provides the hash for the current position after FEN parsing.
     zobrist_hash = calculate_zobrist_hash_from_scratch();
+
+    // // DEBUG: Print board FEN and Zobrist hash after set_from_fen is complete
+    // std::cerr << "DEBUG: ChessBoard::set_from_fen completed. FEN: " << to_fen() << std::endl;
+    // std::cerr << "DEBUG: ChessBoard::set_from_fen Zobrist Hash: " << zobrist_hash << std::endl;
 }
 
 // Converts the current board state to a FEN string.
@@ -313,6 +318,13 @@ std::string ChessBoard::to_fen() const {
 // It also fills the provided StateInfo object with the board's state *before* the move,
 // which is essential for `undo_move`.
 void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
+    // // DEBUG: Print board FEN and Zobrist hash BEFORE applying the move
+    // std::cerr << "DEBUG: ChessBoard::apply_move BEFORE move " << ChessBitboardUtils::move_to_string(move) << std::endl;
+    // std::cerr << "DEBUG:   Current FEN: " << to_fen() << std::endl;
+    // std::cerr << "DEBUG:   Current Zobrist Hash: " << zobrist_hash << std::endl;
+    // std::cerr << "DEBUG:   Active Player (Before Move): " << ((active_player == PlayerColor::White) ? "White" : "Black") << std::endl;
+
+
     // 1. Save current board state into `state_info` for `undo_move`.
     state_info.previous_castling_rights_mask = castling_rights_mask;
     state_info.previous_en_passant_square_idx = en_passant_square_idx;
@@ -326,6 +338,20 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
     // 2. Convert GamePoint (file, rank) from the `Move` struct to internal 0-63 square indices.
     int from_sq = ChessBitboardUtils::rank_file_to_square(move.from_square.y, move.from_square.x);
     int to_sq = ChessBitboardUtils::rank_file_to_square(move.to_square.y, move.to_square.x);
+
+    // // DEBUG: Print move details
+    // std::cerr << "DEBUG:   Move Details: from=" << ChessBitboardUtils::square_to_string(from_sq)
+    //           << ", to=" << ChessBitboardUtils::square_to_string(to_sq)
+    //           << ", piece_moved=" << static_cast<int>(move.piece_moved_type_idx)
+    //           << ", is_capture=" << move.is_capture
+    //           << ", captured_type=" << static_cast<int>(move.piece_captured_type_idx)
+    //           << ", is_promo=" << move.is_promotion
+    //           << ", promo_type=" << static_cast<int>(move.promotion_piece_type_idx)
+    //           << ", is_ks_castle=" << move.is_kingside_castle
+    //           << ", is_qs_castle=" << move.is_queenside_castle
+    //           << ", is_ep=" << move.is_en_passant
+    //           << ", is_double_push=" << move.is_double_pawn_push << std::endl;
+
 
     // 3. Update Halfmove Clock and Fullmove Number.
     // Reset halfmove clock if pawn moves or a piece is captured.
@@ -353,7 +379,7 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
     // IMPORTANT: en_passant_square_idx is reset BEFORE new one is set in step 12
     en_passant_square_idx = 64; // Reset to no en passant target by default for the next turn.
 
-    // 7. Move the piece on bitboards and update its Zobrist hash.
+    // 7. Get moving piece bitboard pointer.
     uint64_t* moving_piece_bb_ptr = nullptr; // Initialize to nullptr for safety
     if (active_player == PlayerColor::White) {
         switch (move.piece_moved_type_idx) {
@@ -363,8 +389,7 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
             case PieceTypeIndex::ROOK: moving_piece_bb_ptr = &white_rooks; break;
             case PieceTypeIndex::QUEEN: moving_piece_bb_ptr = &white_queens; break;
             case PieceTypeIndex::KING: moving_piece_bb_ptr = &white_king; break;
-            default: // Should not happen with valid moves from MoveGenerator
-                return; // Or throw exception
+            default: return;
         }
     } else { // Black player is active.
         switch (move.piece_moved_type_idx) {
@@ -374,15 +399,79 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
             case PieceTypeIndex::ROOK: moving_piece_bb_ptr = &black_rooks; break;
             case PieceTypeIndex::QUEEN: moving_piece_bb_ptr = &black_queens; break;
             case PieceTypeIndex::KING: moving_piece_bb_ptr = &black_king; break;
-            default: // Should not happen
-                return; // Or throw exception
+            default: return;
         }
     }
 
     // Safety check: ensure pointer is valid before dereferencing
     if (moving_piece_bb_ptr == nullptr) {
-        return; // Or throw an exception
+        return;
     }
+
+    // NEW LOGIC ORDER: Handle Captures FIRST (Step 8 from old logic, now executed earlier)
+    if (move.piece_captured_type_idx != PieceTypeIndex::NONE) { 
+        state_info.captured_piece_type_idx = move.piece_captured_type_idx;
+        state_info.captured_piece_color = (active_player == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
+        
+        int captured_sq = to_sq; 
+
+        uint64_t* captured_piece_bb_ptr = nullptr;
+        if (state_info.captured_piece_color == PlayerColor::White) {
+            switch (move.piece_captured_type_idx) {
+                case PieceTypeIndex::PAWN: captured_piece_bb_ptr = &white_pawns; break;
+                case PieceTypeIndex::KNIGHT: captured_piece_bb_ptr = &white_knights; break;
+                case PieceTypeIndex::BISHOP: captured_piece_bb_ptr = &white_bishops; break;
+                case PieceTypeIndex::ROOK: captured_piece_bb_ptr = &white_rooks; break;
+                case PieceTypeIndex::QUEEN: captured_piece_bb_ptr = &white_queens; break;
+                default: return; 
+            }
+        } else {
+            switch (move.piece_captured_type_idx) {
+                case PieceTypeIndex::PAWN: captured_piece_bb_ptr = &black_pawns; break;
+                case PieceTypeIndex::KNIGHT: captured_piece_bb_ptr = &black_knights; break;
+                case PieceTypeIndex::BISHOP: captured_piece_bb_ptr = &black_bishops; break;
+                case PieceTypeIndex::ROOK: captured_piece_bb_ptr = &black_rooks; break;
+                case PieceTypeIndex::QUEEN: captured_piece_bb_ptr = &black_queens; break;
+                default: return;
+            }
+        }
+        
+        if (captured_piece_bb_ptr == nullptr) {
+            return;
+        }
+
+        if (move.is_en_passant) {
+            if (active_player == PlayerColor::White) {
+                captured_sq = to_sq - 8;
+            } else {
+                captured_sq = to_sq + 8;
+            }
+        }
+        state_info.captured_square_idx = captured_sq;
+
+        // // DEBUG: Before clearing captured piece
+        // std::cerr << "DEBUG:   BITBOARD: Before clearing captured piece " << static_cast<int>(move.piece_captured_type_idx) 
+        //           << " at " << ChessBitboardUtils::square_to_string(captured_sq) 
+        //           << ". Captured BB: " << std::hex << *captured_piece_bb_ptr << std::dec << std::endl;
+        
+        // Clear captured piece from its square (Bitboards).
+        ChessBitboardUtils::clear_bit(*captured_piece_bb_ptr, captured_sq);
+        // Toggle captured piece from Zobrist hash (XOR out its hash contribution).
+        toggle_zobrist_piece(move.piece_captured_type_idx, state_info.captured_piece_color, captured_sq);
+        
+        // // DEBUG: After clearing captured piece
+        // std::cerr << "DEBUG:   BITBOARD: After clearing captured piece. Captured BB: " << std::hex << *captured_piece_bb_ptr << std::dec << std::endl;
+        // std::cerr << "DEBUG:   FEN after capture (" << ChessBitboardUtils::square_to_string(captured_sq) << "): " << to_fen() << std::endl;
+        // std::cerr << "DEBUG:   Zobrist Hash after capture: " << zobrist_hash << std::endl;
+    }
+
+
+    // Now, move the piece on bitboards and update its Zobrist hash (formerly Step 7).
+    // // DEBUG: Before moving piece
+    // std::cerr << "DEBUG:   BITBOARD: Before moving piece " << static_cast<int>(move.piece_moved_type_idx) 
+    //           << " from " << ChessBitboardUtils::square_to_string(from_sq) 
+    //           << " to " << ChessBitboardUtils::square_to_string(to_sq) 
+    //           << ". Moving BB: " << std::hex << *moving_piece_bb_ptr << std::dec << std::endl;
 
     // Toggle (XOR out) the piece's hash contribution from its original square.
     toggle_zobrist_piece(move.piece_moved_type_idx, active_player, from_sq);
@@ -393,56 +482,11 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
     // Toggle (XOR in) the piece's hash contribution at its new square.
     toggle_zobrist_piece(move.piece_moved_type_idx, active_player, to_sq);
 
-    // 8. Handle Captures (if `piece_captured_type_idx` is not NONE).
-    if (move.piece_captured_type_idx != PieceTypeIndex::NONE) { 
-        // Save captured piece info to state_info
-        state_info.captured_piece_type_idx = move.piece_captured_type_idx;
-        state_info.captured_piece_color = (active_player == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
-        
-        int captured_sq = to_sq; // By default, captured piece is on the `to_sq`.
+    // // DEBUG: After moving piece
+    // std::cerr << "DEBUG:   BITBOARD: After moving piece. Moving BB: " << std::hex << *moving_piece_bb_ptr << std::dec << std::endl;
+    // std::cerr << "DEBUG:   FEN after piece moved (" << ChessBitboardUtils::square_to_string(from_sq) << " to " << ChessBitboardUtils::square_to_string(to_sq) << "): " << to_fen() << std::endl;
+    // std::cerr << "DEBUG:   Zobrist Hash after piece move: " << zobrist_hash << std::endl;
 
-        uint64_t* captured_piece_bb_ptr = nullptr; // Initialize for safety
-        if (state_info.captured_piece_color == PlayerColor::White) { // Captured White piece
-            switch (move.piece_captured_type_idx) {
-                case PieceTypeIndex::PAWN: captured_piece_bb_ptr = &white_pawns; break;
-                case PieceTypeIndex::KNIGHT: captured_piece_bb_ptr = &white_knights; break;
-                case PieceTypeIndex::BISHOP: captured_piece_bb_ptr = &white_bishops; break;
-                case PieceTypeIndex::ROOK: captured_piece_bb_ptr = &white_rooks; break;
-                case PieceTypeIndex::QUEEN: captured_piece_bb_ptr = &white_queens; break;
-                case PieceTypeIndex::KING: // King cannot be captured in a normal move
-                case PieceTypeIndex::NONE: default: return; // Should not happen with valid move data
-            }
-        } else { // Captured Black piece
-            switch (move.piece_captured_type_idx) {
-                case PieceTypeIndex::PAWN: captured_piece_bb_ptr = &black_pawns; break;
-                case PieceTypeIndex::KNIGHT: captured_piece_bb_ptr = &black_knights; break;
-                case PieceTypeIndex::BISHOP: captured_piece_bb_ptr = &black_bishops; break;
-                case PieceTypeIndex::ROOK: captured_piece_bb_ptr = &black_rooks; break;
-                case PieceTypeIndex::QUEEN: captured_piece_bb_ptr = &black_queens; break;
-                case PieceTypeIndex::KING: // King cannot be captured
-                case PieceTypeIndex::NONE: default: return; // Should not happen
-            }
-        }
-        
-        if (captured_piece_bb_ptr == nullptr) {
-            return;
-        }
-
-        if (move.is_en_passant) {
-            // For en passant, the captured pawn is not on `to_sq`.
-            if (active_player == PlayerColor::White) { // White pawn captured black pawn
-                captured_sq = to_sq - 8; // Black pawn was one rank below the target square.
-            } else { // Black pawn captured white pawn
-                captured_sq = to_sq + 8; // White pawn was one rank above the target square.
-            }
-        }
-        state_info.captured_square_idx = captured_sq; // Save captured square for undo.
-
-        // Clear captured piece from its square (Bitboards).
-        ChessBitboardUtils::clear_bit(*captured_piece_bb_ptr, captured_sq);
-        // Toggle captured piece from Zobrist hash (XOR out its hash contribution).
-        toggle_zobrist_piece(move.piece_captured_type_idx, state_info.captured_piece_color, captured_sq);
-    }
 
     // 9. Handle Castling (King and Rook move together).
     if (move.is_kingside_castle) { // Kingside castling (e.g., E1G1 for White, E8G8 for Black).
@@ -463,6 +507,11 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
         ChessBitboardUtils::clear_bit(*rook_bb_ptr, rook_from_sq);
         ChessBitboardUtils::set_bit(*rook_bb_ptr, rook_to_sq);
         toggle_zobrist_piece(PieceTypeIndex::ROOK, active_player, rook_to_sq);
+
+        // // DEBUG: FEN after kingside castling rook move
+        // std::cerr << "DEBUG:   FEN after kingside castling rook move: " << to_fen() << std::endl;
+        // std::cerr << "DEBUG:   Zobrist Hash after kingside castling rook move: " << zobrist_hash << std::endl;
+
     } else if (move.is_queenside_castle) { // Queenside castling (e.g., E1C1 for White, E8C8 for Black).
         int rook_from_sq, rook_to_sq;
         uint64_t* rook_bb_ptr;
@@ -481,13 +530,17 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
         ChessBitboardUtils::clear_bit(*rook_bb_ptr, rook_from_sq);
         ChessBitboardUtils::set_bit(*rook_bb_ptr, rook_to_sq);
         toggle_zobrist_piece(PieceTypeIndex::ROOK, active_player, rook_to_sq);
+
+        // // DEBUG: FEN after queenside castling rook move
+        // std::cerr << "DEBUG:   FEN after queenside castling rook move: " << to_fen() << std::endl;
+        // std::cerr << "DEBUG:   Zobrist Hash after queenside castling rook move: " << zobrist_hash << std::endl;
     }
 
     // 10. Handle Pawn Promotion.
     if (move.is_promotion) {
         
         // Remove the pawn from the board and from the Zobrist hash at the promotion square.
-        // The pawn's hash at `to_sq` was added in step 7, so we need to remove it to replace with promoted piece.
+        // The pawn's hash at `to_sq` was added by the general piece move (step 7), so we need to remove it to replace with promoted piece.
         toggle_zobrist_piece(move.piece_moved_type_idx, active_player, to_sq); // Remove pawn hash
         
         uint64_t* pawn_bb_ptr = (active_player == PlayerColor::White) ? &white_pawns : &black_pawns;
@@ -523,9 +576,16 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
 
         ChessBitboardUtils::set_bit(*promoted_bb_ptr, to_sq); // Set bit for the new promoted piece.
         toggle_zobrist_piece(move.promotion_piece_type_idx, active_player, to_sq); // Add promoted piece's hash.
+
+        // // DEBUG: FEN after promotion
+        // std::cerr << "DEBUG:   FEN after promotion to " << static_cast<int>(move.promotion_piece_type_idx) << ": " << to_fen() << std::endl;
+        // std::cerr << "DEBUG:   Zobrist Hash after promotion: " << zobrist_hash << std::endl;
     }
 
-    // 11. Update Castling Rights Mask.
+    // 11. Update Castling Rights Mask and its Zobrist hash.
+    // XOR out old castling rights hash BEFORE updating the mask.
+    //zobrist_hash ^= zobrist_castling_keys[castling_rights_mask]; // This was already done in step 5
+
     // If the king moved, all castling rights for that color are permanently lost.
     if (move.piece_moved_type_idx == PieceTypeIndex::KING) {
         if (active_player == PlayerColor::White) { // Active player is still white at this point
@@ -549,11 +609,12 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
         if (to_sq == ChessBitboardUtils::A8_SQ) castling_rights_mask &= ~ChessBitboardUtils::CASTLE_BQ_BIT;
         if (to_sq == ChessBitboardUtils::H8_SQ) castling_rights_mask &= ~ChessBitboardUtils::CASTLE_BK_BIT;
     }
-    // The previous implementation was missing the XOR-in for new castling rights hash here.
-    // As per user instruction, I am not adding it back.
+    // XOR in new castling rights hash AFTER updating the mask.
+    zobrist_hash ^= zobrist_castling_keys[castling_rights_mask];
 
 
-    // 12. Set new En Passant Target Square (if the move was a double pawn push).
+    // 12. Set new En Passant Target Square (if the move was a double pawn push) and update its Zobrist hash.
+    // Note: old en passant key was XORed out in step 6.
     if (move.is_double_pawn_push) {
         // The target square for en passant is the square *behind* the pawn that just moved two squares.
         if (active_player == PlayerColor::White) { // White pawn moved from rank 2 to 4 (e.g., E2 to E4)
@@ -570,13 +631,28 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
     black_occupied_squares = black_pawns | black_knights | black_bishops | black_rooks | black_queens | black_king;
     occupied_squares = white_occupied_squares | black_occupied_squares;
 
+    // // DEBUG: Active Player (Before Flip):
+    // std::cerr << "DEBUG:   Active Player (Before Flip): " << ((active_player == PlayerColor::White) ? "White" : "Black") << std::endl;
+
     // 14. Toggle Active Player for the next turn. This is crucial for correct turn management.
     active_player = (active_player == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
+    
+    // // DEBUG: Print board FEN and Zobrist hash AFTER applying the move entirely
+    // std::cerr << "DEBUG: ChessBoard::apply_move AFTER move " << ChessBitboardUtils::move_to_string(move) << " fully applied." << std::endl;
+    // std::cerr << "DEBUG:   Final FEN: " << to_fen() << std::endl;
+    // std::cerr << "DEBUG:   Final Zobrist Hash: " << zobrist_hash << std::endl;
+    // std::cerr << "DEBUG:   Active Player (After Flip): " << ((active_player == PlayerColor::White) ? "White" : "Black") << std::endl;
 }
 
 // Undoes a previously applied move, restoring the board to its state before the move.
 // It uses the information from the provided StateInfo object (which was filled by apply_move).
 void ChessBoard::undo_move(const Move& move, const StateInfo& state_info) {
+    // // DEBUG: Print board FEN and Zobrist hash BEFORE undoing the move
+    // std::cerr << "DEBUG: ChessBoard::undo_move BEFORE undoing move " << ChessBitboardUtils::move_to_string(move) << std::endl;
+    // std::cerr << "DEBUG:   Current FEN: " << to_fen() << std::endl;
+    // std::cerr << "DEBUG:   Current Zobrist Hash: " << zobrist_hash << std::endl;
+    // std::cerr << "DEBUG:   Active Player (Before Undo): " << ((active_player == PlayerColor::White) ? "White" : "Black") << std::endl;
+
     // 1. Convert GamePoint (file, rank) to internal square index (0-63).
     int from_sq = ChessBitboardUtils::rank_file_to_square(move.from_square.y, move.from_square.x);
     int to_sq = ChessBitboardUtils::rank_file_to_square(move.to_square.y, move.to_square.x);
@@ -587,6 +663,8 @@ void ChessBoard::undo_move(const Move& move, const StateInfo& state_info) {
     active_player = state_info.previous_active_player;
     // XOR back the side to move hash (since it was XORed in apply_move).
     zobrist_hash ^= zobrist_black_to_move_key;
+    // std::cerr << "DEBUG:   Active Player (After Restore): " << ((active_player == PlayerColor::White) ? "White" : "Black") << std::endl;
+
 
     // 3. Reverse En Passant hash update.
     // If the new EP target was set, XOR it out.
@@ -710,10 +788,20 @@ void ChessBoard::undo_move(const Move& move, const StateInfo& state_info) {
         return;
     }
 
+    // // DEBUG: Before moving piece back
+    // std::cerr << "DEBUG:   BITBOARD: Before moving piece back " << static_cast<int>(move.piece_moved_type_idx) 
+    //           << " from " << ChessBitboardUtils::square_to_string(to_sq) 
+    //           << " to " << ChessBitboardUtils::square_to_string(from_sq) 
+    //           << ". Moving BB: " << std::hex << *moving_piece_bb_ptr << std::dec << std::endl;
+
     toggle_zobrist_piece(move.piece_moved_type_idx, active_player, to_sq); // Remove hash from new square (where it was moved to)
     ChessBitboardUtils::clear_bit(*moving_piece_bb_ptr, to_sq);             // Clear bit from new square
     ChessBitboardUtils::set_bit(*moving_piece_bb_ptr, from_sq);             // Set bit back to old square
     toggle_zobrist_piece(move.piece_moved_type_idx, active_player, from_sq); // Add hash back to old square
+
+
+    // // DEBUG: After moving piece back
+    // std::cerr << "DEBUG:   BITBOARD: After moving piece back. Moving BB: " << std::hex << *moving_piece_bb_ptr << std::dec << std::endl;
 
 
     // 8. Restore Captured Piece (New logic)
@@ -740,8 +828,16 @@ void ChessBoard::undo_move(const Move& move, const StateInfo& state_info) {
         }
 
         if (captured_piece_bb_ptr) {
+            // // DEBUG: Before restoring captured piece
+            // std::cerr << "DEBUG:   BITBOARD: Before restoring captured piece " << static_cast<int>(state_info.captured_piece_type_idx) 
+            //           << " at " << ChessBitboardUtils::square_to_string(state_info.captured_square_idx) 
+            //           << ". Captured BB: " << std::hex << *captured_piece_bb_ptr << std::dec << std::endl;
+
             ChessBitboardUtils::set_bit(*captured_piece_bb_ptr, state_info.captured_square_idx);
             toggle_zobrist_piece(state_info.captured_piece_type_idx, state_info.captured_piece_color, state_info.captured_square_idx);
+            
+            // // DEBUG: After restoring captured piece
+            // std::cerr << "DEBUG:   BITBOARD: After restoring captured piece. Captured BB: " << std::hex << *captured_piece_bb_ptr << std::dec << std::endl;
         }
     }
 
