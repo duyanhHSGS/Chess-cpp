@@ -29,24 +29,24 @@ IncludeVersionInfo=1
 SupportXPThemes=0
 CompilerSet=6
 CompilerSettings=0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0
-UnitCount=9
+UnitCount=16
 
 [VersionInfo]
 Major=1
 Minor=0
 Release=0
-Build=121
+Build=149
 LanguageID=1033
 CharsetID=1252
 CompanyName=
-FileVersion=1.0.0.121
+FileVersion=1.0.0.149
 FileDescription=Developed using the Dev-C++ IDE
 InternalName=
 LegalCopyright=
 LegalTrademarks=
 OriginalFilename=
 ProductName=
-ProductVersion=1.0.0.121
+ProductVersion=1.0.0.149
 AutoIncBuildNr=1
 SyncProduct=1
 
@@ -101,7 +101,7 @@ OverrideBuildCmd=0
 BuildCmd=
 
 [Unit11]
-FileName=ChessBitboardUtils.h
+FileName=UciHandler.h
 CompileCpp=1
 Folder=
 Compile=1
@@ -111,7 +111,7 @@ OverrideBuildCmd=0
 BuildCmd=
 
 [Unit12]
-FileName=ChessBoard.cpp
+FileName=ChessAI.h
 CompileCpp=1
 Folder=
 Compile=1
@@ -131,7 +131,7 @@ OverrideBuildCmd=0
 BuildCmd=
 
 [Unit14]
-FileName=GameManager.h
+FileName=UciHandler.cpp
 CompileCpp=1
 Folder=
 Compile=1
@@ -141,7 +141,7 @@ OverrideBuildCmd=0
 BuildCmd=
 
 [Unit16]
-FileName=UciHandler.h
+FileName=ChessAI.cpp
 CompileCpp=1
 Folder=
 Compile=1
@@ -161,7 +161,7 @@ OverrideBuildCmd=0
 BuildCmd=
 
 [Unit10]
-FileName=ChessBitboardUtils.cpp
+FileName=GameManager.h
 CompileCpp=1
 Folder=
 Compile=1
@@ -192,6 +192,16 @@ BuildCmd=
 
 [Unit8]
 FileName=MoveGenerator.cpp
+CompileCpp=1
+Folder=
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit15]
+FileName=Constants.h
 CompileCpp=1
 Folder=
 Compile=1

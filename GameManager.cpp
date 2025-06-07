@@ -1,140 +1,161 @@
-#include "GameManager.h"
-#include "ChessBitboardUtils.h" // For print_bitboard and ChessBitboardUtils::initialize_attack_tables
-#include <iostream>             // For std::cerr
-#include <algorithm>            // For std::find_if, std::count
-#include <random>               // For std::random_device, std::mt19937, std::uniform_int_distribution
-#include <stdexcept>            // For std::runtime_error
+#include "GameManager.h"    // Include the header for GameManager itself
+#include "UciHandler.h"     // Include the header for UciHandler to perform I/O
+#include "ChessBitboardUtils.h" // For move_to_string and initialize_attack_tables
+#include <iostream>         // Required for std::cin, std::cout
+#include <sstream>          // Required for std::stringstream for parsing
+#include <random>           // Required for std::mt19937_64, std::uniform_int_distribution
+#include <algorithm>        // For std::find, or other algorithms as needed
+
 
 // Constructor for GameManager.
-GameManager::GameManager() : rng_(std::random_device()()) {
-    // Ensure attack tables are initialized once.
+// It ensures that global/static resources (like attack tables) are initialized
+// and sets up the initial board state.
+GameManager::GameManager()
+    : board(),           // Initialize the ChessBoard member
+      chess_ai()         // Initialize the ChessAI member
+{
+    // Initialize static attack tables for various pieces once.
+    // This is a crucial step for performance and should happen before
+    // any board or move generation operations.
+    // It's safe to call this here, as ChessBitboardUtils internally
+    // ensures it's only initialized once via a static flag.
     ChessBitboardUtils::initialize_attack_tables();
-    // ChessBoard constructor handles Zobrist key initialization and resets to startpos.
-    
-    // Add the initial board's Zobrist hash to the history.
-    position_history.push_back(current_board.zobrist_hash);
+    // The ChessBoard `board` member's constructor sets up the starting position and Zobrist keys.
 }
 
-// Resets the game to the starting position and clears game history.
-void GameManager::reset_game() {
-    current_board.reset_to_start_position();
-    position_history.clear();
-    position_history.push_back(current_board.zobrist_hash);
-}
+// The main loop that drives the engine.
+// It continuously reads commands from standard input (via UciHandler conceptually)
+// and dispatches them to appropriate internal handlers.
+void GameManager::run() {
+    // Create an instance of UciHandler.
+    // This object is responsible for all low-level UCI I/O.
+    UciHandler uci_handler;
 
-// Helper function to parse a move string (e.g., "e2e4" or "e7e8q") into a Move object.
-// This function needs to determine the piece moved, if it's a capture, promotion, etc.
-// It searches for the move within the list of legal moves to populate the Move object fully.
-Move GameManager::parse_algebraic_move(const std::string& move_str, const std::vector<Move>& legal_moves) const {
-    if (move_str.length() < 4) {
-        throw std::runtime_error("Move string too short. Expected format like 'e2e4' or 'e7e8q'.");
-    }
+    // Main loop: Continuously read lines from standard input (where the GUI sends commands).
+    std::string line;
+    while (std::getline(std::cin, line)) {
+        std::stringstream ss(line); // Use stringstream to parse the command line.
+        std::string command;
+        ss >> command; // Extract the primary command keyword.
 
-    // Extract from and to square coordinates
-    int from_file = move_str[0] - 'a';
-    int from_rank = move_str[1] - '1';
-    int to_file = move_str[2] - 'a';
-    int to_rank = move_str[3] - '1';
-
-    GamePoint from_gp = {from_file, from_rank};
-    GamePoint to_gp = {to_file, to_rank};
-
-    PieceTypeIndex promotion_piece = PieceTypeIndex::NONE;
-    if (move_str.length() == 5) {
-        char promo_char = std::tolower(move_str[4]);
-        switch (promo_char) {
-            case 'q': promotion_piece = PieceTypeIndex::QUEEN; break;
-            case 'r': promotion_piece = PieceTypeIndex::ROOK; break;
-            case 'b': promotion_piece = PieceTypeIndex::BISHOP; break;
-            case 'n': promotion_piece = PieceTypeIndex::KNIGHT; break;
-            default: throw std::runtime_error("Invalid promotion piece in move string for parsing.");
+        // Dispatch commands to dedicated handler methods.
+        // This makes the `run` method clean and focuses on command routing.
+        if (command == "uci") {
+            handleUciCommand();
+        } else if (command == "isready") {
+            handleIsReadyCommand();
+        } else if (command == "ucinewgame") {
+            handleUciNewGameCommand();
+        } else if (command == "position") {
+            // Pass the entire command line to `handlePositionCommand` for parsing.
+            handlePositionCommand(line);
+        } else if (command == "go") {
+            handleGoCommand();
+        } else if (command == "quit") {
+            break; // Exit the main loop, terminating the engine.
+        } else {
+            // For any unknown commands, you might log an error or simply ignore them.
+            // For a UCI engine, silence is often preferred for unknown commands.
+            // uci_handler.sendInfo("Unknown command: " + command);
         }
     }
+}
 
-    // Find the exact move from the legal moves list
-    auto it = std::find_if(legal_moves.begin(), legal_moves.end(), [&](const Move& m) {
-        bool matches_from = (m.from_square.x == from_gp.x && m.from_square.y == from_gp.y);
-        bool matches_to = (m.to_square.x == to_gp.x && m.to_square.y == to_gp.y);
-        bool matches_promo = (!m.is_promotion && promotion_piece == PieceTypeIndex::NONE) ||
-                             (m.is_promotion && m.promotion_piece_type_idx == promotion_piece);
-        return matches_from && matches_to && matches_promo;
-    });
+// Handles the 'uci' command.
+void GameManager::handleUciCommand() {
+    UciHandler uci_handler; // Create a temporary UciHandler for this scope.
+    uci_handler.sendUciIdentity(); // Send engine name and author.
+    uci_handler.sendUciOk();       // Signal UCI initialization is complete.
+}
 
-    if (it != legal_moves.end()) {
-        return *it; // Return the fully populated Move object
+// Handles the 'isready' command.
+void GameManager::handleIsReadyCommand() {
+    UciHandler uci_handler;
+    // Perform any readiness checks here if needed (e.g., confirm all tables are loaded).
+    uci_handler.sendReadyOk(); // Signal that the engine is ready.
+}
+
+// Handles the 'ucinewgame' command.
+void GameManager::handleUciNewGameCommand() {
+    // Reset the internal ChessBoard to its starting position.
+    board.reset_to_start_position();
+    // In a more complex engine, you would also clear transposition tables,
+    // reset history heuristics, etc., here.
+}
+
+// Handles the 'position' command.
+// This method parses the FEN/startpos and then applies any subsequent moves.
+void GameManager::handlePositionCommand(const std::string& command_line) {
+    std::stringstream ss(command_line);
+    std::string token;
+    ss >> token; // Consume "position"
+
+    std::string sub_command;
+    ss >> sub_command; // Read "startpos" or "fen"
+
+    std::string temp_word; // Used to check for "moves" keyword.
+
+    if (sub_command == "startpos") {
+        board.reset_to_start_position(); // Set board to the standard starting position.
+        ss >> temp_word; // Try to read "moves"
+    } else if (sub_command == "fen") {
+        std::string fen_string_part;
+        // Read FEN components until "moves" keyword or end of line.
+        while (ss >> temp_word && temp_word != "moves") {
+            if (!fen_string_part.empty()) {
+                fen_string_part += " "; // Add space between FEN components.
+            }
+            fen_string_part += temp_word;
+        }
+        board.set_from_fen(fen_string_part); // Initialize board from the parsed FEN.
     } else {
-        throw std::runtime_error("Move: " + move_str + " is not a legal move in this position.");
+        // Handle invalid 'position' sub-command.
+        // For robustness, you might send an info message or log this.
+        return;
+    }
+
+    // If 'moves' keyword was found (either after 'startpos' or 'fen').
+    if (temp_word == "moves") {
+        std::string move_str;
+        MoveGenerator move_gen; // Create a MoveGenerator to validate moves.
+        // Apply each move specified in the command line.
+        while (ss >> move_str) {
+            std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
+            bool move_found = false;
+            for (const auto& legal_move : legal_moves) {
+                if (ChessBitboardUtils::move_to_string(legal_move) == move_str) {
+                    StateInfo info_for_undo; // StateInfo to correctly undo the move later if needed (e.g., in search).
+                    board.apply_move(legal_move, info_for_undo); // Apply the move to the board.
+                    move_found = true;
+                    break;
+                }
+            }
+            if (!move_found) {
+                // If a move from the position command is not found, it indicates an issue.
+                // In a real engine, this might be an error or simply an illegal move from the GUI.
+                // We'll break to prevent further incorrect state updates.
+                break;
+            }
+        }
     }
 }
 
-// Sets the board position based on UCI "position" command.
-// Handles "startpos" or "fen" and applies subsequent moves.
-void GameManager::set_board_from_uci_position(std::string fen_string, const std::vector<std::string>& moves_str) {
-    // If fen_string is empty, it means the "startpos" case was processed in UciHandler
-    // and UciHandler already provided the full FEN for startpos.
+// Handles the 'go' command.
+// This is where the AI search would be initiated.
+void GameManager::handleGoCommand() {
+    UciHandler uci_handler;
     
-    current_board.set_from_fen(fen_string);
-    position_history.clear(); // Clear history for the new base position
-    position_history.push_back(current_board.zobrist_hash); // Add the base FEN hash
+    // Request the best move from the ChessAI instance.
+    // The ChessAI handles its own move generation (using MoveGenerator internally).
+    Move best_move = chess_ai.findBestMove(board);
 
-    // Apply all moves from the UCI command
-    for (const std::string& move_uci : moves_str) {
-        std::vector<Move> legal_moves_for_current_pos = move_gen.generate_legal_moves(current_board);
-        Move move_to_apply = parse_algebraic_move(move_uci, legal_moves_for_current_pos);
-        
-        StateInfo info_for_undo; // State info for undo (not used here but needed by apply_move)
-        current_board.apply_move(move_to_apply, info_for_undo);
-        position_history.push_back(current_board.zobrist_hash); // Add hash after applying each move
-    }
-}
-
-// Finds the best move for the current position.
-// For now, this will return a random legal move.
-// In the future, this will trigger the main search algorithm.
-Move GameManager::find_best_move() {
-    std::vector<Move> legal_moves = move_gen.generate_legal_moves(current_board);
-
-//    if (legal_moves.empty()) {
-//        // Return an invalid move if no legal moves are available (checkmate/stalemate)
-//        // A move with from_square.x == 64 can signify an invalid move.
-//        return Move(); // Default constructor for Move should make it invalid.
-//    }
-
-    // For now, pick a random legal move.
-    std::uniform_int_distribution<size_t> dist(0, legal_moves.size() - 1);
-    size_t random_index = dist(rng_);
-    return legal_moves[random_index];
-}
-
-// Helper function to determine the current game status.
-GameStatus GameManager::get_current_game_status(const std::vector<Move>& legal_moves) const {
-    // If there are no legal moves:
-    if (legal_moves.empty()) {
-        // Check if the current active player's king is in check.
-        if (current_board.is_king_in_check(current_board.active_player)) {
-            // If in check and no legal moves, it's checkmate.
-            return (current_board.active_player == PlayerColor::White) ? GameStatus::CHECKMATE_BLACK_WINS : GameStatus::CHECKMATE_WHITE_WINS;
-        } else {
-            // If not in check and no legal moves, it's stalemate.
-            return GameStatus::STALEMATE;
-        }
-    } 
-    // Check for Fifty-Move Rule
-    else if (current_board.halfmove_clock >= 100) { 
-        return GameStatus::DRAW_FIFTY_MOVE;
-    } 
-    // Check for Threefold Repetition
-    else {
-        // Count occurrences of the current Zobrist hash in the history.
-        // A position needs to occur 3 times for a draw claim.
-        // If current_board.zobrist_hash exists twice in `position_history` (from previous turns),
-        // then the current occurrence makes it the third.
-        int repetition_count = std::count(position_history.begin(), position_history.end(), current_board.zobrist_hash);
-        
-        if (repetition_count >= 3) { 
-            return GameStatus::DRAW_THREEFOLD_REPETITION;
-        } else {
-            return GameStatus::ONGOING;
-        }
+    // After receiving the best move, check if it's a valid move.
+    // If the AI returned an invalid move (e.g., default-constructed Move::NONE),
+    // it implies no legal moves were found (checkmate/stalemate).
+    if (best_move.piece_moved_type_idx == PieceTypeIndex::NONE) {
+        uci_handler.sendBestMove("(none)"); // Indicate no move can be made.
+    } else {
+        // Send the chosen move back to the GUI via UciHandler.
+        uci_handler.sendBestMove(ChessBitboardUtils::move_to_string(best_move));
     }
 }

@@ -1,46 +1,79 @@
 #ifndef UCI_HANDLER_H
 #define UCI_HANDLER_H
 
-#include <string>   // For std::string
-#include <iostream> // For std::cout, std::cin, std::getline (internal usage)
-#include <vector>   // For std::vector (for command arguments)
+// Include necessary standard library headers
+#include <string>     // For std::string
+#include <iostream>   // For std::cin, std::cout
+#include <sstream>    // For std::stringstream (useful for parsing input)
 
-// Forward declaration of GameManager to avoid circular dependencies.
-// UciHandler will interact with GameManager, but GameManager doesn't need UciHandler's full definition here.
-class GameManager;
+// Note: UciHandler should *not* include ChessBoard, Move, etc.,
+// as it should be decoupled from the core game logic.
+// It only deals with raw UCI string input/output.
 
-// The UciHandler class is responsible for all input and output operations
-// for the chess engine. It will eventually parse UCI commands and format
-// engine responses according to the UCI protocol.
+/**
+ * @class UciHandler
+ * @brief Handles the low-level Universal Chess Interface (UCI) communication.
+ *
+ * This class is responsible solely for reading raw UCI commands from standard input
+ * and writing UCI responses to standard output. It acts as a bridge between the
+ * chess GUI and the GameManager, but does not interpret the semantics of the
+ * chess commands itself, beyond identifying the command type.
+ *
+ * Primary Responsibilities:
+ * - **Reading UCI Input:** Reads full lines from `std::cin`.
+ * - **Basic Command Parsing:** Extracts the primary command keyword (e.g., "uci", "position", "go").
+ * - **Sending UCI Output:** Provides methods to send standard UCI responses like
+ * "id name", "uciok", "readyok", "bestmove", and "info".
+ */
 class UciHandler {
 public:
-    // Constructor: Takes a reference to the GameManager to interact with it.
-    explicit UciHandler(GameManager& game_manager);
+    /**
+     * @brief Constructs a new UciHandler object.
+     */
+    UciHandler();
 
-    // The main loop that reads UCI commands from stdin and dispatches them.
-    void run_uci_loop();
+    /**
+     * @brief Reads a single line from standard input, representing a UCI command.
+     *
+     * This method blocks until a full line is available.
+     * @return The raw command line as a string. Returns an empty string if EOF is reached.
+     */
+    std::string readLine();
 
-    // Sends a line of output to stdout (for UCI responses).
-    void send_line(const std::string& message);
+    /**
+     * @brief Sends the engine's identity and capabilities as per the UCI protocol.
+     * Typically called in response to the "uci" command.
+     */
+    void sendUciIdentity();
 
-    // Sends an error message to stderr (for debugging/protocol violations, not UCI standard output).
-    void send_error(const std::string& message);
+    /**
+     * @brief Sends the "uciok" response, signaling that the engine has finished
+     * sending its UCI identity and options.
+     */
+    void sendUciOk();
+
+    /**
+     * @brief Sends the "readyok" response, signaling that the engine is ready
+     * to receive commands.
+     */
+    void sendReadyOk();
+
+    /**
+     * @brief Sends the "bestmove" command with the engine's chosen move.
+     * @param move_string The algebraic string representation of the best move (e.g., "e2e4").
+     * @param ponder_string An optional string for the ponder move (if available).
+     */
+    void sendBestMove(const std::string& move_string, const std::string& ponder_string = "");
+
+    /**
+     * @brief Sends an "info" string to the GUI for debugging or status updates.
+     * @param message The message string to send.
+     */
+    void sendInfo(const std::string& message);
 
 private:
-    // Reference to the GameManager instance. UciHandler orchestrates GameManager actions.
-    GameManager& game_manager_;
-
-    // Private helper methods for parsing and handling specific UCI commands.
-    void handle_uci_command();
-    void handle_isready_command();
-    void handle_setoption_command(const std::vector<std::string>& tokens);
-    void handle_ucinewgame_command();
-    void handle_position_command(const std::vector<std::string>& tokens);
-    void handle_go_command(const std::vector<std::string>& tokens);
-    void handle_quit_command();
-
-    // Helper to split a string into tokens by a delimiter (default space).
-    std::vector<std::string> split_string(const std::string& str, char delimiter = ' ');
+    // No private members or helper methods are strictly necessary for this simple
+    // handler, as its main job is direct I/O.
 };
 
 #endif // UCI_HANDLER_H

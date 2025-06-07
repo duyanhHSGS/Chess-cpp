@@ -1,58 +1,99 @@
 #ifndef GAME_MANAGER_H
 #define GAME_MANAGER_H
 
-#include "ChessBoard.h"     // For ChessBoard class
-#include "MoveGenerator.h"  // For MoveGenerator class
-#include "Types.h"          // For GameStatus enum class
-#include "Move.h"           // For Move struct
-#include "UciHandler.h"     // For UciHandler class (needed for private member)
-#include <vector>           // For std::vector
-#include <string>           // For std::string
-#include <random>           // For std::random_device, std::mt19937, std::uniform_int_distribution
+// Include necessary standard library headers
+#include <string> // For std::string to handle command and FEN strings
+#include <vector> // For std::vector to manage lists of moves
 
-// The GameManager class orchestrates the overall game flow,
-// manages game state, and integrates with the Chess AI and UCI protocol.
+// Include our custom chess engine component headers
+#include "ChessBoard.h"     // The core class managing the chess board state
+#include "Move.h"           // Defines the 'Move' structure for chess moves
+#include "MoveGenerator.h"  // Provides functionality to generate legal moves
+#include "ChessAI.h"        // Include ChessAI to integrate it into GameManager
+
+/**
+ * @class GameManager
+ * @brief Manages the overall flow of the chess engine, orchestrating UCI communication,
+ * board state, and AI interaction.
+ *
+ * This class acts as the central hub, decoupling the UCI protocol handling from
+ * the core chess logic and AI.
+ *
+ * Primary Responsibilities:
+ * - **Game Flow Management:** Initializes the board, manages turns, tracks game
+ * state (though game end conditions like checkmate/stalemate detection are
+ * planned for future implementation within the ChessBoard/MoveGenerator).
+ * - **UCI Command Dispatch:** Receives parsed UCI commands (e.g., from a UciHandler)
+ * and dispatches them to appropriate internal methods.
+ * - **AI Integration:** Passes the current ChessBoard state to the ChessAI
+ * component to find the best move and then applies that move.
+ * - **Ownership:** Owns the primary ChessBoard and ChessAI instances.
+ */
 class GameManager {
 public:
-    // Constructor for GameManager.
-    // Initializes the ChessBoard and MoveGenerator.
+    /**
+     * @brief Constructs a new GameManager object.
+     * Initializes the ChessBoard to its starting position and sets up the ChessAI.
+     * Also responsible for ensuring static resources like bitboard attack tables
+     * and Zobrist keys are initialized once.
+     */
     GameManager();
 
-    // Resets the game to the starting position and clears game history.
-    // Called by UciHandler on "ucinewgame" command.
-    void reset_game();
-
-    // Sets the board position based on UCI "position" command.
-    // Handles "startpos" or "fen" and applies subsequent moves.
-    void set_board_from_uci_position(std::string fen_or_startpos, const std::vector<std::string>& moves_str);
-
-    // Finds the best move for the current position.
-    // For now, this will return a random legal move.
-    // In the future, this will trigger the main search algorithm.
-    Move find_best_move();
+    /**
+     * @brief The main loop that drives the engine.
+     * Continuously reads parsed UCI commands (e.g., from a UciHandler) and
+     * processes them. This is where the engine's primary execution thread resides.
+     */
+    void run();
 
 private:
-    // The current state of the chessboard.
-    ChessBoard current_board;
-    // The move generator instance used to find legal moves.
-    MoveGenerator move_gen;
-    // History of Zobrist hashes to detect threefold repetition.
-    std::vector<uint64_t> position_history;
-    // Random number generator for selecting a random move (placeholder for AI).
-    std::mt19937 rng_;
+    // Core game state component: The chess board.
+    // This is a direct member, implying GameManager owns and manages its lifetime.
+    ChessBoard board;
 
-    // Note: The UciHandler is NOT a member here. It is passed into GameManager's methods
-    // or GameManager calls a global/singleton logger. For simplicity, we are passing it in main.cpp to GameManager.
-    // However, the current UciHandler implementation calls GameManager methods.
-    // To resolve this, GameManager should *not* have a UciHandler member directly.
-    // Instead, it should rely on UciHandler calling its public methods.
+    // AI component: Responsible for calculating the best move.
+    // This is a direct member, implying GameManager owns and manages its lifetime.
+    ChessAI chess_ai;
 
-    // Helper function to determine the current game status.
-    GameStatus get_current_game_status(const std::vector<Move>& legal_moves) const;
+    // --- Private Methods for Handling Specific UCI Commands ---
+    // These methods encapsulate the logic for responding to different UCI commands.
+    // They assume the command has already been parsed into a manageable format.
 
-    // Helper function to parse a move string (e.g., "e2e4") into a Move object.
-    // This is distinct from UciHandler's parsing, as it needs board context.
-    Move parse_algebraic_move(const std::string& move_str, const std::vector<Move>& legal_moves) const;
+    /**
+     * @brief Handles the 'uci' command.
+     * Responds with engine identity and capabilities (id name, id author, uciok).
+     */
+    void handleUciCommand();
+
+    /**
+     * @brief Handles the 'isready' command.
+     * Ensures any necessary engine setup (e.g., table initialization) is complete
+     * and responds with 'readyok'.
+     */
+    void handleIsReadyCommand();
+
+    /**
+     * @brief Handles the 'ucinewgame' command.
+     * Resets the board to the starting position and clears any internal search data.
+     */
+    void handleUciNewGameCommand();
+
+    /**
+     * @brief Handles the 'position' command.
+     * Sets up the board state from a FEN string or 'startpos', and applies
+     * a sequence of moves if provided.
+     * @param command_line The full string for the 'position' command,
+     * e.g., "position startpos moves e2e4 e7e5" or
+     * "position fen rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1 moves e2e4".
+     */
+    void handlePositionCommand(const std::string& command_line);
+
+    /**
+     * @brief Handles the 'go' command.
+     * Initiates the AI's search for the best move given the current board state
+     * and outputs the result via UCI protocol (e.g., 'bestmove').
+     */
+    void handleGoCommand();
 };
 
 #endif // GAME_MANAGER_H
