@@ -29,7 +29,7 @@ struct Move {
     bool is_promotion;        
     // If is_promotion is true, this indicates the type of piece the pawn promotes to.
     // (e.g., PieceTypeIndex::QUEEN, PieceTypeIndex::KNIGHT).
-    PieceTypeIndex promotion_piece_type_idx; 
+    PieceTypeIndex promotion_piece_type_idx;
     
     // True if this move is a kingside castle.
     bool is_kingside_castle;  

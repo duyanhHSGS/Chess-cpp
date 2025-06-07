@@ -1,310 +1,366 @@
-#include "ChessBitboardUtils.h" // Include its own header for declarations
-#include "Types.h"              // For PlayerColor, PieceTypeIndex (enum class)
-#include <iostream>             // For debugging output
-#include <cmath>                // For std::abs in knight/king attack generation
+#include "ChessBitboardUtils.h"
+#include "Move.h" // <--- ADDED: Include the full definition of Move
+#include <iostream> 
+#include <vector>   
+#include <stdexcept> 
+#include <cmath> // For std::abs in sliding piece functions
 
-namespace ChessBitboardUtils {
+// ============================================================================
+// Static Member Definitions (Bitmasks and Attack Tables)
+// ============================================================================
 
-    // --- Static Member Definitions (Attack Tables) ---
-    // These are the definitions (memory allocations) for the static arrays declared in the header.
-    uint64_t pawn_attacks[2][64];
-    uint64_t knight_attacks[64];
-    uint64_t king_attacks[64];
+// Rank masks: A bitboard with all bits set for a given rank.
+const uint64_t ChessBitboardUtils::RANK_1 = 0x00000000000000FFULL;
+const uint64_t ChessBitboardUtils::RANK_2 = 0x000000000000FF00ULL;
+const uint64_t ChessBitboardUtils::RANK_3 = 0x0000000000FF0000ULL;
+const uint64_t ChessBitboardUtils::RANK_4 = 0x00000000FF000000ULL;
+const uint64_t ChessBitboardUtils::RANK_5 = 0x000000FF00000000ULL;
+const uint64_t ChessBitboardUtils::RANK_6 = 0x0000FF0000000000ULL;
+const uint64_t ChessBitboardUtils::RANK_7 = 0x00FF000000000000ULL;
+const uint64_t ChessBitboardUtils::RANK_8 = 0xFF00000000000000ULL;
 
-    // Static definitions for ray attack tables.
-    uint64_t rank_masks[64];      // Horizontal attacks for each square (full rank, ignoring blockers)
-    uint64_t file_masks[64];      // Vertical attacks for each square (full file, ignoring blockers)
-    uint64_t diag_a1_h8_masks[64]; // Diagonal attacks (A1-H8 type diagonal, ignoring blockers)
-    uint64_t diag_h1_a8_masks[64]; // Diagonal attacks (H1-A8 type diagonal, ignoring blockers)
+// File masks: A bitboard with all bits set for a given file.
+const uint64_t ChessBitboardUtils::FILE_A = 0x0101010101010101ULL;
+const uint64_t ChessBitboardUtils::FILE_B = 0x0202020202020202ULL;
+const uint64_t ChessBitboardUtils::FILE_C = 0x0404040404040404ULL;
+const uint64_t ChessBitboardUtils::FILE_D = 0x0808080808080808ULL;
+const uint64_t ChessBitboardUtils::FILE_E = 0x1010101010101010ULL;
+const uint64_t ChessBitboardUtils::FILE_F = 0x2020202020202020ULL;
+const uint64_t ChessBitboardUtils::FILE_G = 0x4040404040404040ULL;
+const uint64_t ChessBitboardUtils::FILE_H = 0x8080808080808080ULL;
 
-    bool attack_tables_initialized = false; // Initialize the flag to false.
+// Individual square bitboards.
+const uint64_t ChessBitboardUtils::A1_SQ_BB = 1ULL << 0;
+const uint64_t ChessBitboardUtils::H1_SQ_BB = 1ULL << 7;
+const uint64_t ChessBitboardUtils::A8_SQ_BB = 1ULL << 56;
+const uint64_t ChessBitboardUtils::H8_SQ_BB = 1ULL << 63;
+const uint64_t ChessBitboardUtils::E1_SQ_BB = 1ULL << 4;
+const uint64_t ChessBitboardUtils::E8_SQ_BB = 1ULL << 60;
+const uint64_t ChessBitboardUtils::B1_SQ_BB = 1ULL << 1;
+const uint64_t ChessBitboardUtils::G1_SQ_BB = 1ULL << 6;
+const uint64_t ChessBitboardUtils::C1_SQ_BB = 1ULL << 2;
+const uint64_t ChessBitboardUtils::F1_SQ_BB = 1ULL << 5;
+const uint64_t ChessBitboardUtils::B8_SQ_BB = 1ULL << 57;
+const uint64_t ChessBitboardUtils::G8_SQ_BB = 1ULL << 62;
+const uint64_t ChessBitboardUtils::C8_SQ_BB = 1ULL << 58;
+const uint64_t ChessBitboardUtils::F8_SQ_BB = 1ULL << 61;
+const uint64_t ChessBitboardUtils::D1_SQ_BB = 1ULL << 3;
+const uint64_t ChessBitboardUtils::D8_SQ_BB = 1ULL << 59;
 
-    // Helper function to generate attacks along a single ray.
-    // Used by initialize_attack_tables and sliding attack functions.
-    // start_sq: The square from which the ray originates.
-    // delta: The change in square index for each step along the ray (e.g., 1 for East, 8 for North).
-    // exclude_start: If true, the start_sq itself is not included in the attack mask.
-    //
-    // Example: generate_ray_attacks(E1_SQ, 1) would generate attacks along the 1st rank from E1 to H1.
-    // Example: generate_ray_attacks(A1_SQ, 9) would generate attacks along the A1-H8 diagonal.
-    uint64_t generate_ray_attacks(int start_sq, int delta, bool exclude_start = true) {
-        uint64_t attacks = 0ULL;
-        int current_sq = start_sq;
+// Individual square indices.
+const int ChessBitboardUtils::A1_SQ = 0;
+const int ChessBitboardUtils::B1_SQ = 1;
+const int ChessBitboardUtils::C1_SQ = 2;
+const int ChessBitboardUtils::D1_SQ = 3;
+const int ChessBitboardUtils::E1_SQ = 4;
+const int ChessBitboardUtils::F1_SQ = 5;
+const int ChessBitboardUtils::G1_SQ = 6;
+const int ChessBitboardUtils::H1_SQ = 7;
 
-        if (!exclude_start) {
-            attacks |= (1ULL << start_sq);
-        }
+const int ChessBitboardUtils::A8_SQ = 56;
+const int ChessBitboardUtils::B8_SQ = 57;
+const int ChessBitboardUtils::C8_SQ = 58;
+const int ChessBitboardUtils::D8_SQ = 59;
+const int ChessBitboardUtils::E8_SQ = 60;
+const int ChessBitboardUtils::F8_SQ = 61;
+const int ChessBitboardUtils::G8_SQ = 62;
+const int ChessBitboardUtils::H8_SQ = 63;
 
-        while (true) {
-            int prev_sq = current_sq; // Keep track of previous square to check for wrapping
-            current_sq += delta;
 
-            // Check if wrapping around board edges (e.g., A-file to H-file or vice-versa)
-            // For horizontal rays (delta = +/-1): check if rank changed.
-            if ((std::abs(delta) == 1) && (square_to_rank(current_sq) != square_to_rank(prev_sq))) break;
-            // For vertical rays (delta = +/-8): rank changes, file doesn't.
-            // Diagonal rays (delta = +/-7, +/-9): check if rank or file is out of bounds for new diagonal.
-            // More robust check for diagonals: if (abs(file_diff) != abs(rank_diff)) then it's a wrap.
-            // Simpler for fixed 8x8: check if current_sq is valid.
+// Castling bitmasks (for castling_rights_mask)
+const uint8_t ChessBitboardUtils::CASTLE_WK_BIT = 0b1000; // White Kingside (K)
+const uint8_t ChessBitboardUtils::CASTLE_WQ_BIT = 0b0100; // White Queenside (Q)
+const uint8_t ChessBitboardUtils::CASTLE_BK_BIT = 0b0010; // Black Kingside (k)
+const uint8_t ChessBitboardUtils::CASTLE_BQ_BIT = 0b0001; // Black Queenside (q)
 
-            if (current_sq < 0 || current_sq >= 64) break; // Out of bounds
 
-            // Check for wrapping in a more general way for diagonals.
-            // If the move crosses a file/rank boundary that isn't expected for the delta, it's a wrap.
-            int prev_r = square_to_rank(prev_sq);
-            int prev_f = square_to_file(prev_sq);
-            int curr_r = square_to_rank(current_sq);
-            int curr_f = square_to_file(current_sq);
+// Attack tables (precomputed for performance).
+uint64_t ChessBitboardUtils::knight_attacks[64];
+uint64_t ChessBitboardUtils::king_attacks[64];
+uint64_t ChessBitboardUtils::white_pawn_attacks[64];
+uint64_t ChessBitboardUtils::black_pawn_attacks[64];
+bool ChessBitboardUtils::tables_initialized = false;
 
-            if (std::abs(delta) == 7 || std::abs(delta) == 9) { // Diagonal moves
-                if (std::abs(curr_r - prev_r) != 1 || std::abs(curr_f - prev_f) != 1) break;
-            }
+// ============================================================================
+// Initialization of Static Attack Tables
+// ============================================================================
 
-            attacks |= (1ULL << current_sq);
-        }
-        return attacks;
+// Initializes all static attack tables. This should be called once at program startup.
+void ChessBitboardUtils::initialize_attack_tables() {
+    if (tables_initialized) return; // Ensure tables are initialized only once
+
+    for (int sq = 0; sq < 64; ++sq) {
+        knight_attacks[sq] = generate_knight_attacks(sq);
+        king_attacks[sq] = generate_king_attacks(sq);
+        white_pawn_attacks[sq] = generate_pawn_attacks(sq, PlayerColor::White);
+        black_pawn_attacks[sq] = generate_pawn_attacks(sq, PlayerColor::Black);
     }
+    tables_initialized = true;
+}
+
+// Helper to generate knight attack bitmask for a given square.
+uint64_t ChessBitboardUtils::generate_knight_attacks(int square_idx) {
+    uint64_t attacks = 0ULL;
+    // Corrected knight move logic using file/rank differences
+    int r = square_to_rank(square_idx);
+    int f = square_to_file(square_idx);
+
+    // Deltas for knight moves relative to (rank, file)
+    int knight_dr[] = {-2, -2, -1, -1, 1, 1, 2, 2};
+    int knight_df[] = {-1, 1, -2, 2, -2, 2, -1, 1};
+
+    for (int i = 0; i < 8; ++i) {
+        int new_r = r + knight_dr[i];
+        int new_f = f + knight_df[i];
+
+        if (new_r >= 0 && new_r < 8 && new_f >= 0 && new_f < 8) {
+            attacks |= (1ULL << rank_file_to_square(new_r, new_f));
+        }
+    }
+    return attacks;
+}
+
+// Helper to generate king attack bitmask for a given square.
+uint64_t ChessBitboardUtils::generate_king_attacks(int square_idx) {
+    uint64_t attacks = 0ULL;
+    uint64_t king_bb = 1ULL << square_idx;
+
+    // These shifts generate all 8 possible moves, including wrapping.
+    // The bitwise AND with ~FILE_A, ~FILE_H, etc., masks out illegal wraps.
+    attacks |= (king_bb << 1) & ~FILE_A; // Right
+    attacks |= (king_bb >> 1) & ~FILE_H; // Left
+    attacks |= (king_bb << 8);           // Up
+    attacks |= (king_bb >> 8);           // Down
+    attacks |= (king_bb << 9) & ~FILE_A; // Up-Right (N.E.)
+    attacks |= (king_bb >> 9) & ~FILE_H; // Down-Left (S.W.)
+    attacks |= (king_bb << 7) & ~FILE_H; // Up-Left (N.W.)
+    attacks |= (king_bb >> 7) & ~FILE_A; // Down-Right (S.E.)
+    return attacks;
+}
+
+// Helper to generate pawn attack bitmask for a given square and color.
+uint64_t ChessBitboardUtils::generate_pawn_attacks(int square_idx, PlayerColor color) {
+    uint64_t attacks = 0ULL;
+    uint64_t pawn_bb = 1ULL << square_idx;
+
+    if (color == PlayerColor::White) {
+        // White pawns attack diagonally forward (N.W. and N.E.)
+        attacks |= (pawn_bb << 9) & ~FILE_A; // Up-Right (N.E.)
+        attacks |= (pawn_bb << 7) & ~FILE_H; // Up-Left (N.W.)
+    } else { // Black
+        // Black pawns attack diagonally forward (S.W. and S.E.)
+        attacks |= (pawn_bb >> 9) & ~FILE_H; // Down-Left (S.W.)
+        attacks |= (pawn_bb >> 7) & ~FILE_A; // Down-Right (S.E.)
+    }
+    return attacks;
+}
 
 
-    // --- Initialization of Attack Tables ---
-    // This function computes and populates all precomputed attack tables.
-    // It should be called once at the start of the program.
-    void initialize_attack_tables() {
-        if (attack_tables_initialized) {
-            std::cerr << "WARNING: ChessBitboardUtils::attack_tables already initialized." << std::endl;
-            return;
+// ============================================================================
+// Bit Manipulation Functions
+// ============================================================================
+
+// Sets a bit at the given index in the bitboard.
+void ChessBitboardUtils::set_bit(uint64_t& bitboard, int square_idx) {
+    if (square_idx >= 0 && square_idx < 64) {
+        bitboard |= (1ULL << square_idx);
+    }
+}
+
+// Clears a bit at the given index in the bitboard.
+void ChessBitboardUtils::clear_bit(uint64_t& bitboard, int square_idx) {
+    if (square_idx >= 0 && square_idx < 64) {
+        bitboard &= ~(1ULL << square_idx);
+    }
+}
+
+// Tests if a bit is set at the given index in the bitboard.
+bool ChessBitboardUtils::test_bit(uint64_t bitboard, int square_idx) {
+    if (square_idx >= 0 && square_idx < 64) {
+        return (bitboard & (1ULL << square_idx)) != 0;
+    }
+    return false;
+}
+
+// Gets the index of the least significant bit (LSB) that is set to 1.
+// Returns 64 if the bitboard is empty.
+int ChessBitboardUtils::get_lsb_index(uint64_t bitboard) {
+    if (bitboard == 0) {
+        return 64; // Indicate no set bit
+    }
+#ifdef _MSC_VER
+    unsigned long index;
+    _BitScanForward64(&index, bitboard);
+    return index;
+#else
+    return __builtin_ctzll(bitboard); // Count trailing zeros for GCC/Clang
+#endif
+}
+
+// Pops (gets and clears) the least significant bit (LSB) from the bitboard.
+// Returns the index of the LSB, or 64 if the bitboard was empty.
+int ChessBitboardUtils::pop_lsb_index(uint64_t& bitboard) {
+    if (bitboard == 0) {
+        return 64; // Indicate no set bit
+    }
+    int lsb_idx = get_lsb_index(bitboard);
+    clear_bit(bitboard, lsb_idx); // Clear the LSB
+    return lsb_idx;
+}
+
+// Counts the number of set bits (pieces) in a bitboard.
+int ChessBitboardUtils::count_set_bits(uint64_t bitboard) {
+#ifdef _MSC_VER
+    return __popcnt64(bitboard); // Intrinsics for MSVC
+#else
+    return __builtin_popcountll(bitboard); // GCC/Clang intrinsic for popcount
+#endif
+}
+
+// Returns a vector of square indices where bits are set in the bitboard.
+std::vector<int> ChessBitboardUtils::get_set_bits(uint64_t bitboard) {
+    std::vector<int> set_bits_indices;
+    while (bitboard) {
+        set_bits_indices.push_back(get_lsb_index(bitboard));
+        pop_lsb_index(bitboard); // Use pop_lsb_index to clear the bit
+    }
+    return set_bits_indices;
+}
+
+
+// ============================================================================
+// Square and Coordinate Conversion Functions
+// ============================================================================
+
+// Converts 0-63 square index to file (0-7).
+uint8_t ChessBitboardUtils::square_to_file(int square_idx) {
+    return square_idx % 8;
+}
+
+// Converts 0-63 square index to rank (0-7).
+uint8_t ChessBitboardUtils::square_to_rank(int square_idx) {
+    return square_idx / 8;
+}
+
+// Converts rank (0-7) and file (0-7) to 0-63 square index.
+int ChessBitboardUtils::rank_file_to_square(uint8_t rank, uint8_t file) {
+    return rank * 8 + file;
+}
+
+// Converts a square index to algebraic notation (e.g., 0 -> "a1", 63 -> "h8").
+std::string ChessBitboardUtils::square_to_string(int square_idx) {
+    if (square_idx < 0 || square_idx >= 64) {
+        return "Invalid"; // Or throw an error
+    }
+    char file_char = 'a' + square_to_file(square_idx);
+    char rank_char = '1' + square_to_rank(square_idx);
+    return std::string(1, file_char) + std::string(1, rank_char);
+}
+
+// Converts a Move object to a standard algebraic notation string (e.g., "e2e4", "g1f3", "e7e8q").
+std::string ChessBitboardUtils::move_to_string(const Move& move) {
+    std::string move_str = "";
+    move_str += square_to_string(rank_file_to_square(move.from_square.y, move.from_square.x));
+    move_str += square_to_string(rank_file_to_square(move.to_square.y, move.to_square.x));
+
+    if (move.is_promotion) {
+        switch (move.promotion_piece_type_idx) {
+            case PieceTypeIndex::QUEEN: move_str += "q"; break;
+            case PieceTypeIndex::ROOK:  move_str += "r"; break;
+            case PieceTypeIndex::BISHOP: move_str += "b"; break;
+            case PieceTypeIndex::KNIGHT: move_str += "n"; break;
+            default: break; // Should not happen
+        }
+    }
+    return move_str;
+}
+
+// ============================================================================
+// Attack Detection Functions (Sliding Pieces)
+// ============================================================================
+
+// Generates a bitboard of squares attacked by a sliding piece from 'start_sq'
+// along a specific 'delta' direction, respecting 'occupied_bb' for blocking.
+uint64_t ChessBitboardUtils::get_sliding_attacks(int start_sq, int delta, uint64_t occupied_bb) {
+    uint64_t attacks = 0ULL;
+    int current_sq = start_sq;
+    uint8_t start_rank = square_to_rank(start_sq);
+    uint8_t start_file = square_to_file(start_sq);
+
+    while (true) {
+        current_sq += delta;
+
+        // Check bounds (0-63)
+        if (current_sq < 0 || current_sq >= 64) {
+            break;
         }
 
-        // --- Initialize Pawn Attacks ---
-        // For each square, calculate where a pawn of each color attacks from that square.
-        for (int sq = 0; sq < 64; ++sq) {
-            uint64_t square_bb = (1ULL << sq); // Bitboard with only the current square set.
-
-            // White pawn attacks (moving "up" the board, capturing diagonally)
-            // A white pawn on 'sq' attacks (sq + 7) or (sq + 9).
-            uint64_t white_pawn_attack_mask = 0ULL;
-            // North-West diagonal: target_sq = sq + 7. Valid if not on A-file (sq % 8 != 0).
-            if (sq + 7 < 64 && (sq % 8 != 0)) { 
-                white_pawn_attack_mask |= (square_bb << 7); 
-            }
-            // North-East diagonal: target_sq = sq + 9. Valid if not on H-file (sq % 8 != 7).
-            if (sq + 9 < 64 && (sq % 8 != 7)) { 
-                white_pawn_attack_mask |= (square_bb << 9); 
-            }
-            pawn_attacks[static_cast<int>(PlayerColor::White)][sq] = white_pawn_attack_mask;
-
-            // Black pawn attacks (moving "down" the board, capturing diagonally)
-            // A black pawn on 'sq' attacks (sq - 7) or (sq - 9).
-            uint64_t black_pawn_attack_mask = 0ULL;
-            // South-West diagonal: target_sq = sq - 9. Valid if not on A-file (sq % 8 != 0).
-            if (sq - 9 >= 0 && (sq % 8 != 0)) { 
-                black_pawn_attack_mask |= (square_bb >> 9); 
-            }
-            // South-East diagonal: target_sq = sq - 7. Valid if not on H-file (sq % 8 != 7).
-            if (sq - 7 >= 0 && (sq % 8 != 7)) { 
-                black_pawn_attack_mask |= (square_bb >> 7); 
-            }
-            pawn_attacks[static_cast<int>(PlayerColor::Black)][sq] = black_pawn_attack_mask;
+        // Handle wrapping for horizontal and vertical moves (rank/file consistency)
+        if (std::abs(delta) == 1 && square_to_rank(current_sq) != start_rank) { // Horizontal (left/right) moves
+            break;
         }
-
-        // --- Initialize Knight Attacks ---
-        // Knight moves are a fixed "L" shape.
-        // For each square, calculate all 8 possible knight moves.
-        int knight_offsets[] = { -17, -15, -10, -6, 6, 10, 15, 17 };
-        for (int sq = 0; sq < 64; ++sq) {
-            uint64_t attack_mask = 0ULL;
-            int r = square_to_rank(sq); // Current rank of the square
-            int f = square_to_file(sq); // Current file of the square
-
-            for (int offset : knight_offsets) {
-                int target_sq = sq + offset;
-                // Check if the potential target square is within board bounds (0-63).
-                if (target_sq >= 0 && target_sq < 64) {
-                    int target_r = square_to_rank(target_sq); // Rank of the target square
-                    int target_f = square_to_file(target_sq); // File of the target square
-
-                    // Additional check to prevent "wrapping around" the board edges.
-                    // A knight's move always changes rank by 1 and file by 2, or vice versa.
-                    // The absolute difference in files should be at most 2, and ranks at most 2.
-                    // The sum of absolute differences should be 3 for an L-shape (1+2 or 2+1).
-                    if (std::abs(r - target_r) <= 2 && std::abs(f - target_f) <= 2 &&
-                        (std::abs(r - target_r) + std::abs(f - target_f) == 3)) { 
-                        attack_mask |= (1ULL << target_sq); // Add this square to the attack mask.
-                    }
-                }
-            }
-            knight_attacks[sq] = attack_mask; // Store the computed mask for this square.
+        if (std::abs(delta) == 8 && square_to_file(current_sq) != start_file) { // Vertical (up/down) moves
+            break;
         }
-
-        // --- Initialize King Attacks ---
-        // King moves one square in any direction (8 directions).
-        // For each square, calculate all 8 possible king moves.
-        int king_offsets[] = { -9, -8, -7, -1, 1, 7, 8, 9 };
-        for (int sq = 0; sq < 64; ++sq) {
-            uint64_t attack_mask = 0ULL;
-            int r = square_to_rank(sq);
-            int f = square_to_file(sq);
-
-            for (int offset : king_offsets) {
-                int target_sq = sq + offset;
-                // Check if the potential target square is within board bounds (0-63).
-                if (target_sq >= 0 && target_sq < 64) {
-                    int target_r = square_to_rank(target_sq);
-                    int target_f = square_to_file(target_sq);
-
-                    // Prevent wrapping around board edges.
-                    // A king's move changes rank by at most 1, and file by at most 1.
-                    if (std::abs(r - target_r) <= 1 && std::abs(f - target_f) <= 1) {
-                         attack_mask |= (1ULL << target_sq);
-                    }
-                }
-            }
-            king_attacks[sq] = attack_mask; // Store the computed mask.
-        }
-
-        // --- Initialize Sliding Piece Ray Masks (Unobstructed) ---
-        // These are full lines/diagonals without considering any pieces on the board.
-        // They will be used later with actual board occupancy to find blocked lines.
-        for (int sq = 0; sq < 64; ++sq) {
-            // Horizontal (rank) attacks: +/-1 offset
-            rank_masks[sq] = generate_ray_attacks(sq, 1, false) | generate_ray_attacks(sq, -1, false);
-            // Vertical (file) attacks: +/-8 offset
-            file_masks[sq] = generate_ray_attacks(sq, 8, false) | generate_ray_attacks(sq, -8, false);
-            // A1-H8 type diagonal attacks: +/-9 offset
-            diag_a1_h8_masks[sq] = generate_ray_attacks(sq, 9, false) | generate_ray_attacks(sq, -9, false);
-            // H1-A8 type diagonal attacks: +/-7 offset
-            diag_h1_a8_masks[sq] = generate_ray_attacks(sq, 7, false) | generate_ray_attacks(sq, -7, false);
+        // For diagonal moves, the rank and file change by the same absolute amount.
+        // If they don't, it implies a wrap-around for +/-7 and +/-9 deltas.
+        if ((std::abs(delta) == 7 || std::abs(delta) == 9) &&
+            (std::abs(static_cast<int>(square_to_rank(current_sq)) - static_cast<int>(start_rank)) != std::abs(current_sq - start_sq) / 8 ||
+             std::abs(static_cast<int>(square_to_file(current_sq)) - static_cast<int>(start_file)) != std::abs(current_sq - start_sq) % 8)) {
+            break;
         }
 
 
-        attack_tables_initialized = true; // Set flag to true after successful initialization.
-        std::cerr << "INFO: ChessBitboardUtils attack tables initialized." << std::endl; // Debugging output
-    }
+        attacks |= (1ULL << current_sq); // Add square to attacks
 
-    // --- Attack Generation Helper Implementations (using precomputed tables and ray tracing) ---
-    // These functions check if a target square is attacked by a given bitboard of enemy pieces.
-
-    // Checks if 'target_sq' is attacked by any pawn from 'enemy_pawns_bb' of 'attacking_color'.
-    bool is_pawn_attacked_by(int target_sq, uint64_t enemy_pawns_bb, PlayerColor attacking_color) {
-        // Calculate the squares from which a pawn of 'attacking_color' could attack 'target_sq'.
-        uint64_t pawn_attackers_mask = 0ULL;
-
-        if (attacking_color == PlayerColor::White) { // Checking if a WHITE pawn attacks `target_sq`
-            // A white pawn attacks a square from the rank directly below it, diagonally.
-            // So, from target_sq, we look for squares at (target_sq - 9) and (target_sq - 7).
-            if (target_sq - 9 >= 0 && (square_to_file(target_sq) > 0)) pawn_attackers_mask |= (1ULL << (target_sq - 9)); // South-West diagonal from target
-            if (target_sq - 7 >= 0 && (square_to_file(target_sq) < 7)) pawn_attackers_mask |= (1ULL << (target_sq - 7)); // South-East diagonal from target
-        } else { // Checking if a BLACK pawn attacks `target_sq`
-            // A black pawn attacks a square from the rank directly above it, diagonally.
-            // So, from target_sq, we look for squares at (target_sq + 7) and (target_sq + 9).
-            if (target_sq + 7 < 64 && (square_to_file(target_sq) > 0)) pawn_attackers_mask |= (1ULL << (target_sq + 7)); // North-West diagonal from target
-            if (target_sq + 9 < 64 && (square_to_file(target_sq) < 7)) pawn_attackers_mask |= (1ULL << (target_sq + 9)); // North-East diagonal from target
+        // If the square is occupied, the sliding attack is blocked.
+        if (test_bit(occupied_bb, current_sq)) {
+            break;
         }
-        
-        // If any of the squares that can attack the target square are occupied by an enemy pawn, then it's attacked.
-        return (pawn_attackers_mask & enemy_pawns_bb) != 0ULL;
     }
+    return attacks;
+}
 
+// Checks if a target square is attacked by a pawn of the specified attacking_color.
+bool ChessBitboardUtils::is_pawn_attacked_by(int target_sq, uint64_t pawn_attackers_bb, PlayerColor attacking_color) {
+    // Generate the pawn attacks *from* the target square (as if a pawn were there)
+    // then AND with the actual pawn attackers to see if any intersect.
+    uint64_t attacks_from_target = (attacking_color == PlayerColor::White) ? black_pawn_attacks[target_sq] : white_pawn_attacks[target_sq];
+    return (attacks_from_target & pawn_attackers_bb) != 0ULL;
+}
 
-    // Checks if 'target_sq' is attacked by any knight from 'enemy_knights_bb'.
-    bool is_knight_attacked_by(int target_sq, uint64_t enemy_knights_bb) {
-        // Use the precomputed knight attack mask for the target square.
-        // Bitwise AND this mask with the bitboard of enemy knights.
-        // If the result is non-zero, it means an enemy knight attacks the target square.
-        return (knight_attacks[target_sq] & enemy_knights_bb) != 0ULL;
+// Checks if a target square is attacked by a knight.
+bool ChessBitboardUtils::is_knight_attacked_by(int target_sq, uint64_t knight_attackers_bb) {
+    // Get precomputed knight attacks from the target square, then AND with actual knight attackers.
+    return (knight_attacks[target_sq] & knight_attackers_bb) != 0ULL;
+}
+
+// Checks if a target square is attacked by a king (i.e., is within a king's movement range).
+bool ChessBitboardUtils::is_king_attacked_by(int target_sq, uint64_t king_attackers_bb) {
+    // Get precomputed king attacks from the target square, then AND with actual king attackers.
+    return (king_attacks[target_sq] & king_attackers_bb) != 0ULL;
+}
+
+// Checks if a target square is attacked by a rook or queen.
+bool ChessBitboardUtils::is_rook_queen_attacked_by(int target_sq, uint64_t rook_queen_attackers_bb, uint64_t occupied_bb) {
+    // Deltas for horizontal/vertical attacks (rook-like)
+    std::array<int, 4> deltas = {-8, 8, -1, 1}; // Up, Down, Left, Right
+
+    uint64_t total_attacks_from_target = 0ULL;
+    for (int delta : deltas) {
+        total_attacks_from_target |= get_sliding_attacks(target_sq, delta, occupied_bb);
     }
+    return (total_attacks_from_target & rook_queen_attackers_bb) != 0ULL;
+}
 
-    // Checks if 'target_sq' is attacked by an enemy king (for proximity check).
-    bool is_king_attacked_by(int target_sq, uint64_t enemy_king_bb) {
-        return (king_attacks[target_sq] & enemy_king_bb) != 0ULL;
+// Checks if a target square is attacked by a bishop or queen.
+bool ChessBitboardUtils::is_bishop_queen_attacked_by(int target_sq, uint64_t bishop_queen_attackers_bb, uint64_t occupied_bb) {
+    // Deltas for diagonal attacks (bishop-like)
+    std::array<int, 4> deltas = {-9, -7, 7, 9}; // NW, NE, SW, SE
+
+    uint64_t total_attacks_from_target = 0ULL;
+    for (int delta : deltas) {
+        total_attacks_from_target |= get_sliding_attacks(target_sq, delta, occupied_bb);
     }
-
-    // Helper to get sliding attacks for a given square and direction, considering blockers.
-    // Example: get_sliding_attacks(E1_SQ, 8, occupied_squares) would calculate vertical attacks North from E1.
-    uint64_t get_sliding_attacks(int start_sq, int delta, uint64_t all_occupied_bb) {
-        uint64_t attacks = 0ULL;
-        int current_sq = start_sq;
-
-        while (true) {
-            int prev_sq = current_sq;
-            current_sq += delta;
-
-            if (current_sq < 0 || current_sq >= 64) break; // Out of bounds
-
-            // Check for wrapping in a more general way for diagonals.
-            int prev_r = square_to_rank(prev_sq);
-            int prev_f = square_to_file(prev_sq);
-            int curr_r = square_to_rank(current_sq);
-            int curr_f = square_to_file(current_sq);
-
-            if (std::abs(delta) == 1) { // Horizontal
-                if (curr_r != prev_r) break; // Wrapped to another rank
-            } else if (std::abs(delta) == 8) { // Vertical
-                if (curr_f != prev_f) break; // Wrapped to another file
-            } else if (std::abs(delta) == 7 || std::abs(delta) == 9) { // Diagonal
-                if (std::abs(curr_r - prev_r) != 1 || std::abs(curr_f - prev_f) != 1) break;
-            } else {
-                break; // Invalid delta
-            }
-
-            attacks |= (1ULL << current_sq); // Add square to attacks
-
-            // If the current square is occupied, it's a blocker, so stop.
-            if (test_bit(all_occupied_bb, current_sq)) {
-                break;
-            }
-        }
-        return attacks;
-    }
-
-
-    // Checks if 'target_sq' is attacked by any rook or queen from 'rook_queen_attackers_bb'.
-    // 'all_occupied_bb' is needed for sliding piece attacks to determine blockers.
-    bool is_rook_queen_attacked_by(int target_sq, uint64_t rook_queen_attackers_bb, uint64_t all_occupied_bb) {
-        uint64_t attacks_from_target = 0ULL;
-
-        // Check horizontal attacks (East and West)
-        attacks_from_target |= get_sliding_attacks(target_sq, 1, all_occupied_bb); // East
-        attacks_from_target |= get_sliding_attacks(target_sq, -1, all_occupied_bb); // West
-
-        // Check vertical attacks (North and South)
-        attacks_from_target |= get_sliding_attacks(target_sq, 8, all_occupied_bb);  // North
-        attacks_from_target |= get_sliding_attacks(target_sq, -8, all_occupied_bb); // South
-
-        // If any of these calculated attacks intersect with the enemy rook/queen bitboard, then it's attacked.
-        return (attacks_from_target & rook_queen_attackers_bb) != 0ULL;
-    }
-
-    // Checks if 'target_sq' is attacked by any bishop or queen from 'bishop_queen_attackers_bb'.
-    // 'all_occupied_bb' is needed for sliding piece attacks to determine blockers.
-    bool is_bishop_queen_attacked_by(int target_sq, uint64_t bishop_queen_attackers_bb, uint64_t all_occupied_bb) {
-        uint64_t attacks_from_target = 0ULL;
-
-        // Check diagonal attacks (North-East, South-West, North-West, South-East)
-        attacks_from_target |= get_sliding_attacks(target_sq, 9, all_occupied_bb);  // North-East (A1-H8 diagonal)
-        attacks_from_target |= get_sliding_attacks(target_sq, -9, all_occupied_bb); // South-West (A1-H8 diagonal)
-        attacks_from_target |= get_sliding_attacks(target_sq, 7, all_occupied_bb);  // North-West (H1-A8 diagonal)
-        attacks_from_target |= get_sliding_attacks(target_sq, -7, all_occupied_bb); // South-East (H1-A8 diagonal)
-        
-        // If any of these calculated attacks intersect with the enemy bishop/queen bitboard, then it's attacked.
-        return (attacks_from_target & bishop_queen_attackers_bb) != 0ULL;
-    }
-
-    // --- Debugging / Visualization (Optional) ---
-    // Prints a bitboard to console for visual debugging.
-    void print_bitboard(uint64_t bitboard) {
-        for (int rank = 7; rank >= 0; --rank) { // From rank 8 (internal 7) down to 1 (internal 0)
-            for (int file = 0; file < 8; ++file) { // From file 'a' (internal 0) to 'h' (internal 7)
-                int square_idx = rank_file_to_square(rank, file); // Get the square index for current (rank, file)
-                if (test_bit(bitboard, square_idx)) {
-                    std::cout << "1 ";
-                } else {
-                    std::cout << ". ";
-                }
-            }
-            std::cout << std::endl;
-        }
-        std::cout << std::endl;
-    }
-
-} // namespace ChessBitboardUtils
+    return (total_attacks_from_target & bishop_queen_attackers_bb) != 0ULL;
+}

@@ -112,3 +112,16 @@ Board Copying	Makes a full copy per move	Uses incremental make/unmake without fu
 King Safety Check	Applies move, then checks manually	Uses bitwise attack lookups for instant legality check
 Move Storage	std::vector<Move> (dynamic growth)	Fixed-size array (Move moves[MAX_MOVES]) for speed
 Move Ordering	No prioritization yet	Moves sorted by importance for search efficiency
+
+
+Right now, is_square_attacked manually loops through each piece type to check for threats.
+
+Instead, use precomputed attack masks and bitwise operations to check all threats at once:
+
+
+
+
+better:
+ looking at the generate legal move(), instead of checking each bitboard manually (test_bit(board.white_pawns, square_idx), etc.),
+
+Could I use a single bitwise lookup table that maps square indices to piece types? could it be faster?

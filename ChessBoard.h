@@ -18,14 +18,9 @@ struct Move;
 struct StateInfo {
     uint8_t previous_castling_rights_mask; // Original castling rights before the move.
     int previous_en_passant_square_idx;    // Original en passant square before the move.
-    int previous_halfmove_clock;           // Original halfmove clock before the move.
+    int previous_halfmove_clock;           // Original halfmove number before the move.
     int previous_fullmove_number;          // Original fullmove number before the move.
     PlayerColor previous_active_player;    // Original active player before the move.
-    uint64_t previous_zobrist_hash_component; // Used to incrementally update hash (e.g., original en passant or castling hash part).
-                                            // More common is to just XOR the hash components in reverse order.
-                                            // For simplicity, we'll store specific components needed to revert.
-                                            // For Zobrist, it's often simpler to just XOR changes back directly.
-
     // Captured piece information is critical for unmaking captures.
     PieceTypeIndex captured_piece_type_idx; // Type of the captured piece (NONE if no capture).
     PlayerColor captured_piece_color;       // Color of the captured piece (only valid if captured_piece_type_idx != NONE).

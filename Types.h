@@ -5,8 +5,8 @@
 
 // Represents the color of a player.
 enum class PlayerColor {
-    White = 1,
-    Black = -1
+    White = 0, // Changed from 1 to 0 for 0-based array indexing consistency
+    Black = 1  // Changed from -1 to 1 for 0-based array indexing consistency
 };
 
 // Represents the type of a chess piece (regardless of color).
@@ -36,8 +36,8 @@ enum class GameStatus {
 // x: file (0-7, where 0='a', 7='h')
 // y: rank (0-7, where 0='1', 7='8')
 struct GamePoint {
-    int x; // File (column)
-    int y; // Rank (row)
+    uint8_t x; // File (column)
+    uint8_t y; // Rank (row)
 };
 
 #endif // TYPES_H

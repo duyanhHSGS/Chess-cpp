@@ -1,7 +1,15 @@
 #include "MoveGenerator.h"
 #include "ChessBitboardUtils.h" // For bit manipulation and square constants
-#include <iostream>             // For debugging output
-#include <cmath>                // For std::abs in sliding piece move generation
+#include <cmath>                // For std::abs in wrapping checks
+#include <array>                // REQUIRED for std::array definition and usage
+
+
+// --- Static Member Definitions for MoveGenerator ---
+// These define the actual static arrays declared in MoveGenerator.h.
+const std::array<int, 4> MoveGenerator::BISHOP_DELTAS = {-9, -7, 7, 9};
+const std::array<int, 4> MoveGenerator::ROOK_DELTAS = {-8, 8, -1, 1};
+const std::array<int, 8> MoveGenerator::QUEEN_DELTAS = {-9, -8, -7, -1, 1, 7, 8, 9};
+
 
 // Helper to check if a square is attacked by a given color.
 // This is used for king safety (e.g., during castling checks or discovering pins).
@@ -40,13 +48,13 @@ bool MoveGenerator::is_square_attacked(int square_idx, PlayerColor attacking_col
 // Generates all pseudo-legal pawn moves for the active player from a given square.
 void MoveGenerator::generate_pawn_moves(const ChessBoard& board, int square_idx, std::vector<Move>& pseudo_legal_moves) {
     PlayerColor color = board.active_player;
-    int rank = ChessBitboardUtils::square_to_rank(square_idx);
-    int file = ChessBitboardUtils::square_to_file(square_idx);
+    uint8_t rank = ChessBitboardUtils::square_to_rank(square_idx); 
+    uint8_t file = ChessBitboardUtils::square_to_file(square_idx); 
 
     // Define pawn movement directions based on color.
     int forward_step = (color == PlayerColor::White) ? 8 : -8;
-    int start_rank = (color == PlayerColor::White) ? 1 : 6; // 1st rank for white pawns, 6th for black pawns
-    int promotion_rank = (color == PlayerColor::White) ? 7 : 0; // 8th rank for white, 1st for black
+    uint8_t start_rank = (color == PlayerColor::White) ? 1 : 6; // 1st rank for white pawns, 6th for black pawns
+    uint8_t promotion_rank = (color == PlayerColor::White) ? 7 : 0; // 8th rank for white, 1st for black
 
     uint64_t empty_squares = ~board.occupied_squares; // All unoccupied squares
 
@@ -56,10 +64,11 @@ void MoveGenerator::generate_pawn_moves(const ChessBoard& board, int square_idx,
     if (target_sq_single >= 0 && target_sq_single < 64 && ChessBitboardUtils::test_bit(empty_squares, target_sq_single)) {
         // If pawn reaches promotion rank, generate promotion moves.
         if (ChessBitboardUtils::square_to_rank(target_sq_single) == promotion_rank) {
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{file, ChessBitboardUtils::square_to_rank(target_sq_single)}, PieceTypeIndex::PAWN, PieceTypeIndex::NONE, false, PieceTypeIndex::QUEEN, true, false, false, false);
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{file, ChessBitboardUtils::square_to_rank(target_sq_single)}, PieceTypeIndex::PAWN, PieceTypeIndex::NONE, false, PieceTypeIndex::ROOK, true, false, false, false);
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{file, ChessBitboardUtils::square_to_rank(target_sq_single)}, PieceTypeIndex::PAWN, PieceTypeIndex::NONE, false, PieceTypeIndex::BISHOP, true, false, false, false);
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{file, ChessBitboardUtils::square_to_rank(target_sq_single)}, PieceTypeIndex::PAWN, PieceTypeIndex::NONE, false, PieceTypeIndex::KNIGHT, true, false, false, false);
+            // Non-capture promotions
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{file, ChessBitboardUtils::square_to_rank(target_sq_single)}, PieceTypeIndex::PAWN, PieceTypeIndex::NONE, true /*is_promotion*/, PieceTypeIndex::QUEEN, false, false, false, false);
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{file, ChessBitboardUtils::square_to_rank(target_sq_single)}, PieceTypeIndex::PAWN, PieceTypeIndex::NONE, true /*is_promotion*/, PieceTypeIndex::ROOK, false, false, false, false);
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{file, ChessBitboardUtils::square_to_rank(target_sq_single)}, PieceTypeIndex::PAWN, PieceTypeIndex::NONE, true /*is_promotion*/, PieceTypeIndex::BISHOP, false, false, false, false);
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{file, ChessBitboardUtils::square_to_rank(target_sq_single)}, PieceTypeIndex::PAWN, PieceTypeIndex::NONE, true /*is_promotion*/, PieceTypeIndex::KNIGHT, false, false, false, false);
         } else {
             // Normal single push.
             pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{file, ChessBitboardUtils::square_to_rank(target_sq_single)}, PieceTypeIndex::PAWN);
@@ -86,9 +95,10 @@ void MoveGenerator::generate_pawn_moves(const ChessBoard& board, int square_idx,
     // Check capture to the left diagonal
     int target_sq_cl = square_idx + capture_left_delta;
     // Ensure target_sq_cl is on the board and that the move doesn't wrap around file.
-    // A simplified check for file wrapping (e.g., from A file to H file)
+    // The file check is crucial to prevent "wrapping" from 'a' file to 'h' file (or vice versa).
     bool is_valid_cl_move = (target_sq_cl >= 0 && target_sq_cl < 64) && 
                             (ChessBitboardUtils::square_to_file(target_sq_cl) == file - 1 || ChessBitboardUtils::square_to_file(target_sq_cl) == file + 1);
+
 
     if (is_valid_cl_move && ChessBitboardUtils::test_bit(enemy_occupied_squares, target_sq_cl)) {
         // Determine captured piece type for the move struct.
@@ -109,11 +119,11 @@ void MoveGenerator::generate_pawn_moves(const ChessBoard& board, int square_idx,
         }
 
         if (ChessBitboardUtils::square_to_rank(target_sq_cl) == promotion_rank) {
-            // Promotion by capture
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::QUEEN, true, false, false, false);
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::ROOK, true, false, false, false);
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::BISHOP, true, false, false, false);
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::KNIGHT, true, false, false, false);
+            // Capture promotions
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::QUEEN, false, false, false, false);
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::ROOK, false, false, false, false);
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::BISHOP, false, false, false, false);
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::KNIGHT, false, false, false, false);
         } else {
             // Normal capture
             pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cl), ChessBitboardUtils::square_to_rank(target_sq_cl)}, PieceTypeIndex::PAWN, captured_type, true);
@@ -122,7 +132,7 @@ void MoveGenerator::generate_pawn_moves(const ChessBoard& board, int square_idx,
 
     // Check capture to the right diagonal
     int target_sq_cr = square_idx + capture_right_delta;
-    // A simplified check for file wrapping
+    // A simplified check for file wrapping (same as above, crucial)
     bool is_valid_cr_move = (target_sq_cr >= 0 && target_sq_cr < 64) && 
                             (ChessBitboardUtils::square_to_file(target_sq_cr) == file - 1 || ChessBitboardUtils::square_to_file(target_sq_cr) == file + 1);
 
@@ -143,11 +153,11 @@ void MoveGenerator::generate_pawn_moves(const ChessBoard& board, int square_idx,
             else if (ChessBitboardUtils::test_bit(board.white_queens, target_sq_cr)) captured_type = PieceTypeIndex::QUEEN;
         }
         if (ChessBitboardUtils::square_to_rank(target_sq_cr) == promotion_rank) {
-            // Promotion by capture
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::QUEEN, true, false, false, false);
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::ROOK, true, false, false, false);
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::BISHOP, true, false, false, false);
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::KNIGHT, true, false, false, false);
+            // Capture promotions
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::QUEEN, false, false, false, false);
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::ROOK, false, false, false, false);
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::BISHOP, false, false, false, false);
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, true, PieceTypeIndex::KNIGHT, false, false, false, false);
         } else {
             // Normal capture
             pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ChessBitboardUtils::square_to_file(target_sq_cr), ChessBitboardUtils::square_to_rank(target_sq_cr)}, PieceTypeIndex::PAWN, captured_type, true);
@@ -156,16 +166,16 @@ void MoveGenerator::generate_pawn_moves(const ChessBoard& board, int square_idx,
 
     // --- En Passant Capture ---
     if (board.en_passant_square_idx != 64) {
-        int ep_file = ChessBitboardUtils::square_to_file(board.en_passant_square_idx);
-        int ep_rank = ChessBitboardUtils::square_to_rank(board.en_passant_square_idx);
+        uint8_t ep_file = ChessBitboardUtils::square_to_file(board.en_passant_square_idx); 
+        uint8_t ep_rank = ChessBitboardUtils::square_to_rank(board.en_passant_square_idx); 
         
         // Check if pawn can capture en passant to the left
         if (file - 1 == ep_file && ((color == PlayerColor::White && rank == 4 && ep_rank == 5) || (color == PlayerColor::Black && rank == 3 && ep_rank == 2))) {
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ep_file, ep_rank}, PieceTypeIndex::PAWN, PieceTypeIndex::PAWN, true, PieceTypeIndex::NONE, false, true, false, false);
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ep_file, ep_rank}, PieceTypeIndex::PAWN, PieceTypeIndex::PAWN, true, PieceTypeIndex::NONE, false, false, true, false);
         }
         // Check if pawn can capture en passant to the right
         if (file + 1 == ep_file && ((color == PlayerColor::White && rank == 4 && ep_rank == 5) || (color == PlayerColor::Black && rank == 3 && ep_rank == 2))) {
-            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ep_file, ep_rank}, PieceTypeIndex::PAWN, PieceTypeIndex::PAWN, true, PieceTypeIndex::NONE, false, true, false, false);
+            pseudo_legal_moves.emplace_back(GamePoint{file, rank}, GamePoint{ep_file, ep_rank}, PieceTypeIndex::PAWN, PieceTypeIndex::PAWN, true, PieceTypeIndex::NONE, false, false, true, false);
         }
     }
 }
@@ -214,13 +224,14 @@ void MoveGenerator::generate_knight_moves(const ChessBoard& board, int square_id
 
 // Generates pseudo-legal sliding moves for a given piece (Bishop, Rook, Queen).
 // This is a common helper used by generate_bishop_moves, generate_rook_moves, generate_queen_moves.
-void generate_sliding_piece_moves_helper(const ChessBoard& board, int square_idx, PieceTypeIndex piece_type, std::vector<Move>& pseudo_legal_moves, const std::vector<int>& deltas) {
+template<size_t N> // Use template to deduce array size for deltas
+void MoveGenerator::generate_sliding_piece_moves_helper(const ChessBoard& board, int square_idx, PieceTypeIndex piece_type, std::vector<Move>& pseudo_legal_moves, const std::array<int, N>& deltas) {
     PlayerColor color = board.active_player;
     uint64_t friendly_occupied_squares = (color == PlayerColor::White) ? board.white_occupied_squares : board.black_occupied_squares;
     uint64_t enemy_occupied_squares = (color == PlayerColor::White) ? board.black_occupied_squares : board.white_occupied_squares;
 
-    int current_rank = ChessBitboardUtils::square_to_rank(square_idx);
-    int current_file = ChessBitboardUtils::square_to_file(square_idx);
+    uint8_t current_rank = ChessBitboardUtils::square_to_rank(square_idx); 
+    uint8_t current_file = ChessBitboardUtils::square_to_file(square_idx); 
 
     for (int delta : deltas) {
         int target_sq = square_idx;
@@ -230,17 +241,16 @@ void generate_sliding_piece_moves_helper(const ChessBoard& board, int square_idx
             if (target_sq < 0 || target_sq >= 64) break; // Out of bounds
             
             // Check for wrapping around files for horizontal moves (+/-1)
-            // If the current file was 7 (H) and delta is 1 (East), target_sq will be 8 (A2), so rank changes.
+            // Cast to int before subtraction to prevent unsigned wrap-around.
             if (std::abs(delta) == 1 && ChessBitboardUtils::square_to_rank(target_sq) != current_rank) break;
             // Check for wrapping around ranks for vertical moves (+/-8)
+            // Cast to int before subtraction to prevent unsigned wrap-around.
             if (std::abs(delta) == 8 && ChessBitboardUtils::square_to_file(target_sq) != current_file) break;
             // Check for wrapping for diagonal moves (+/-7, +/-9)
-            // If current_file is 0 (A) and delta is -9 (NW), target_sq will be -17 (H7), which is off board
-            // But if current_file is 0 (A) and delta is +7 (NW), target_sq will be 7 (H1), which wraps
-            // A simple check is that the difference in rank should be 1 and difference in file should be 1 for a valid diagonal step.
+            // Cast to int before subtraction to prevent unsigned wrap-around.
             if ((std::abs(delta) == 7 || std::abs(delta) == 9) &&
-                (std::abs(ChessBitboardUtils::square_to_rank(target_sq) - current_rank) != 1 ||
-                 std::abs(ChessBitboardUtils::square_to_file(target_sq) - current_file) != 1)) break;
+                (std::abs(static_cast<int>(ChessBitboardUtils::square_to_rank(target_sq)) - static_cast<int>(current_rank)) > 1 || 
+                 std::abs(static_cast<int>(ChessBitboardUtils::square_to_file(target_sq)) - static_cast<int>(current_file)) > 1)) break;
 
 
             if (ChessBitboardUtils::test_bit(friendly_occupied_squares, target_sq)) {
@@ -260,16 +270,18 @@ void generate_sliding_piece_moves_helper(const ChessBoard& board, int square_idx
                     else if (ChessBitboardUtils::test_bit(board.black_bishops, target_sq)) captured_type = PieceTypeIndex::BISHOP;
                     else if (ChessBitboardUtils::test_bit(board.black_rooks, target_sq)) captured_type = PieceTypeIndex::ROOK;
                     else if (ChessBitboardUtils::test_bit(board.black_queens, target_sq)) captured_type = PieceTypeIndex::QUEEN;
+                    else if (ChessBitboardUtils::test_bit(board.black_king, target_sq)) captured_type = PieceTypeIndex::KING;
                 } else {
                     if (ChessBitboardUtils::test_bit(board.white_pawns, target_sq)) captured_type = PieceTypeIndex::PAWN;
                     else if (ChessBitboardUtils::test_bit(board.white_knights, target_sq)) captured_type = PieceTypeIndex::KNIGHT;
                     else if (ChessBitboardUtils::test_bit(board.white_bishops, target_sq)) captured_type = PieceTypeIndex::BISHOP;
                     else if (ChessBitboardUtils::test_bit(board.white_rooks, target_sq)) captured_type = PieceTypeIndex::ROOK;
                     else if (ChessBitboardUtils::test_bit(board.white_queens, target_sq)) captured_type = PieceTypeIndex::QUEEN;
+                    else if (ChessBitboardUtils::test_bit(board.white_king, target_sq)) captured_type = PieceTypeIndex::KING;
                 }
             }
 
-            pseudo_legal_moves.emplace_back(GamePoint{current_file, current_rank},
+            pseudo_legal_moves.emplace_back(GamePoint{ChessBitboardUtils::square_to_file(square_idx), ChessBitboardUtils::square_to_rank(square_idx)},
                                              GamePoint{ChessBitboardUtils::square_to_file(target_sq), ChessBitboardUtils::square_to_rank(target_sq)},
                                              piece_type, captured_type, is_capture);
 
@@ -283,23 +295,17 @@ void generate_sliding_piece_moves_helper(const ChessBoard& board, int square_idx
 
 // Generates all pseudo-legal bishop moves.
 void MoveGenerator::generate_bishop_moves(const ChessBoard& board, int square_idx, std::vector<Move>& pseudo_legal_moves) {
-    // Bishop moves diagonally: NW (+7), NE (+9), SW (-9), SE (-7)
-    std::vector<int> deltas = {-9, -7, 7, 9};
-    generate_sliding_piece_moves_helper(board, square_idx, PieceTypeIndex::BISHOP, pseudo_legal_moves, deltas);
+    generate_sliding_piece_moves_helper(board, square_idx, PieceTypeIndex::BISHOP, pseudo_legal_moves, BISHOP_DELTAS);
 }
 
 // Generates all pseudo-legal rook moves.
 void MoveGenerator::generate_rook_moves(const ChessBoard& board, int square_idx, std::vector<Move>& pseudo_legal_moves) {
-    // Rook moves horizontally/vertically: N (+8), S (-8), E (+1), W (-1)
-    std::vector<int> deltas = {-8, 8, -1, 1};
-    generate_sliding_piece_moves_helper(board, square_idx, PieceTypeIndex::ROOK, pseudo_legal_moves, deltas);
+    generate_sliding_piece_moves_helper(board, square_idx, PieceTypeIndex::ROOK, pseudo_legal_moves, ROOK_DELTAS);
 }
 
 // Generates all pseudo-legal queen moves.
 void MoveGenerator::generate_queen_moves(const ChessBoard& board, int square_idx, std::vector<Move>& pseudo_legal_moves) {
-    // Queen moves all 8 directions.
-    std::vector<int> deltas = {-9, -8, -7, -1, 1, 7, 8, 9};
-    generate_sliding_piece_moves_helper(board, square_idx, PieceTypeIndex::QUEEN, pseudo_legal_moves, deltas);
+    generate_sliding_piece_moves_helper(board, square_idx, PieceTypeIndex::QUEEN, pseudo_legal_moves, QUEEN_DELTAS);
 }
 
 // Generates all pseudo-legal king moves.
@@ -345,8 +351,8 @@ void MoveGenerator::generate_king_moves(const ChessBoard& board, int square_idx,
 
     // --- Castling Moves ---
     // Check castling rights and if path is clear/not attacked.
-    int king_rank = ChessBitboardUtils::square_to_rank(square_idx);
-    int king_file = ChessBitboardUtils::square_to_file(square_idx);
+    uint8_t king_rank = ChessBitboardUtils::square_to_rank(square_idx); 
+    uint8_t king_file = ChessBitboardUtils::square_to_file(square_idx); 
     PlayerColor enemy_color = (color == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
 
     // Kingside Castling
@@ -359,7 +365,7 @@ void MoveGenerator::generate_king_moves(const ChessBoard& board, int square_idx,
             if (!is_square_attacked(ChessBitboardUtils::E1_SQ, enemy_color, board) &&
                 !is_square_attacked(ChessBitboardUtils::F1_SQ, enemy_color, board) &&
                 !is_square_attacked(ChessBitboardUtils::G1_SQ, enemy_color, board)) {
-                pseudo_legal_moves.emplace_back(GamePoint{king_file, king_rank}, GamePoint{ChessBitboardUtils::G1_SQ % 8, ChessBitboardUtils::G1_SQ / 8}, PieceTypeIndex::KING, PieceTypeIndex::NONE, false, PieceTypeIndex::NONE, false, false, true, false);
+                pseudo_legal_moves.emplace_back(GamePoint{king_file, king_rank}, GamePoint{ChessBitboardUtils::square_to_file(ChessBitboardUtils::G1_SQ), ChessBitboardUtils::square_to_rank(ChessBitboardUtils::G1_SQ)}, PieceTypeIndex::KING, PieceTypeIndex::NONE, false, PieceTypeIndex::NONE, true, false, false, false);
             }
         }
     }
@@ -371,7 +377,7 @@ void MoveGenerator::generate_king_moves(const ChessBoard& board, int square_idx,
             if (!is_square_attacked(ChessBitboardUtils::E8_SQ, enemy_color, board) &&
                 !is_square_attacked(ChessBitboardUtils::F8_SQ, enemy_color, board) &&
                 !is_square_attacked(ChessBitboardUtils::G8_SQ, enemy_color, board)) {
-                pseudo_legal_moves.emplace_back(GamePoint{king_file, king_rank}, GamePoint{ChessBitboardUtils::G8_SQ % 8, ChessBitboardUtils::G8_SQ / 8}, PieceTypeIndex::KING, PieceTypeIndex::NONE, false, PieceTypeIndex::NONE, false, false, true, false);
+                pseudo_legal_moves.emplace_back(GamePoint{king_file, king_rank}, GamePoint{ChessBitboardUtils::square_to_file(ChessBitboardUtils::G8_SQ), ChessBitboardUtils::square_to_rank(ChessBitboardUtils::G8_SQ)}, PieceTypeIndex::KING, PieceTypeIndex::NONE, false, PieceTypeIndex::NONE, true, false, false, false);
             }
         }
     }
@@ -387,7 +393,7 @@ void MoveGenerator::generate_king_moves(const ChessBoard& board, int square_idx,
             if (!is_square_attacked(ChessBitboardUtils::E1_SQ, enemy_color, board) &&
                 !is_square_attacked(ChessBitboardUtils::D1_SQ, enemy_color, board) &&
                 !is_square_attacked(ChessBitboardUtils::C1_SQ, enemy_color, board)) {
-                pseudo_legal_moves.emplace_back(GamePoint{king_file, king_rank}, GamePoint{ChessBitboardUtils::C1_SQ % 8, ChessBitboardUtils::C1_SQ / 8}, PieceTypeIndex::KING, PieceTypeIndex::NONE, false, PieceTypeIndex::NONE, false, false, false, true);
+                pseudo_legal_moves.emplace_back(GamePoint{king_file, king_rank}, GamePoint{ChessBitboardUtils::square_to_file(ChessBitboardUtils::C1_SQ), ChessBitboardUtils::square_to_rank(ChessBitboardUtils::C1_SQ)}, PieceTypeIndex::KING, PieceTypeIndex::NONE, false, PieceTypeIndex::NONE, false, true, false, false);
             }
         }
     }
@@ -401,7 +407,7 @@ void MoveGenerator::generate_king_moves(const ChessBoard& board, int square_idx,
             if (!is_square_attacked(ChessBitboardUtils::E8_SQ, enemy_color, board) &&
                 !is_square_attacked(ChessBitboardUtils::D8_SQ, enemy_color, board) &&
                 !is_square_attacked(ChessBitboardUtils::C8_SQ, enemy_color, board)) {
-                pseudo_legal_moves.emplace_back(GamePoint{king_file, king_rank}, GamePoint{ChessBitboardUtils::C8_SQ % 8, ChessBitboardUtils::C8_SQ / 8}, PieceTypeIndex::KING, PieceTypeIndex::NONE, false, PieceTypeIndex::NONE, false, false, false, true);
+                pseudo_legal_moves.emplace_back(GamePoint{king_file, king_rank}, GamePoint{ChessBitboardUtils::square_to_file(ChessBitboardUtils::C8_SQ), ChessBitboardUtils::square_to_rank(ChessBitboardUtils::C8_SQ)}, PieceTypeIndex::KING, PieceTypeIndex::NONE, false, PieceTypeIndex::NONE, false, true, false, false);
             }
         }
     }
@@ -454,14 +460,12 @@ std::vector<Move> MoveGenerator::generate_legal_moves(ChessBoard& board) { // Ch
     }
 
     // --- Filter Pseudo-Legal Moves for Legality (using Make/Unmake) ---
-    // Iterate through each pseudo-legal move.
-    // Apply the move, check if the king is in check, then undo the move.
     for (const auto& move : pseudo_legal_moves) {
         StateInfo info_for_undo; // StateInfo object to capture board state before move.
         
         board.apply_move(move, info_for_undo); // Apply the move to the ACTUAL board
 
-        // After applying the move, the 'active_player' on `board` has *flipped*.
+        // After applying the move, the 'active_player' on `board` has *flipped* to the opponent's turn.
         // We need to check if the KING of the *original* active player is now in check.
         // `current_player` holds the original active player.
         if (!board.is_king_in_check(current_player)) {

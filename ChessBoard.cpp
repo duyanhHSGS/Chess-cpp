@@ -1,10 +1,9 @@
 #include "ChessBoard.h"
 #include "ChessBitboardUtils.h" // For bit manipulation helpers and constants like RANK_2, A1_SQ_BB etc.
-#include "Types.h"              // For PlayerColor, GamePoint, PieceTypeIndex (enum class), GameStatus
-#include "Move.h"               // Required for the full definition of the Move struct in apply_move()
+#include "Types.h" // Include our new types header for PlayerColor, GamePoint, PieceTypeIndex, GameStatus
+#include "Move.h"  // Required for the full definition of the Move struct in apply_move()
 #include <random>    // For std::random_device, std::mt19937_64, std::uniform_int_distribution for Zobrist key generation
 #include <chrono>    // For std::chrono::steady_clock to seed RNG
-#include <iostream>  // For debugging output (std::cerr, std::cout)
 #include <sstream>   // For std::stringstream to parse FEN strings
 #include <cctype>    // For std::isdigit, std::isupper, std::tolower for FEN parsing
 #include <algorithm> // For std::reverse (if used, not currently but commonly in string operations)
@@ -181,7 +180,6 @@ void ChessBoard::set_from_fen(const std::string& fen) {
                 case 'q': ChessBitboardUtils::set_bit(black_queens, square_idx); break;
                 case 'k': ChessBitboardUtils::set_bit(black_king, square_idx); break;
                 default:
-                    std::cerr << "ERROR: Unknown piece character in FEN: " << c << std::endl;
                     return; // Exit or throw an exception for invalid FEN.
             }
             file++; // Move to the next file (rightwards).
@@ -366,7 +364,6 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
             case PieceTypeIndex::QUEEN: moving_piece_bb_ptr = &white_queens; break;
             case PieceTypeIndex::KING: moving_piece_bb_ptr = &white_king; break;
             default: // Should not happen with valid moves from MoveGenerator
-                std::cerr << "ERROR: Invalid piece_moved_type_idx in apply_move (White)." << std::endl;
                 return; // Or throw exception
         }
     } else { // Black player is active.
@@ -378,17 +375,14 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
             case PieceTypeIndex::QUEEN: moving_piece_bb_ptr = &black_queens; break;
             case PieceTypeIndex::KING: moving_piece_bb_ptr = &black_king; break;
             default: // Should not happen
-                std::cerr << "ERROR: Invalid piece_moved_type_idx in apply_move (Black)." << std::endl;
                 return; // Or throw exception
         }
     }
 
     // Safety check: ensure pointer is valid before dereferencing
     if (moving_piece_bb_ptr == nullptr) {
-        std::cerr << "CRITICAL ERROR: moving_piece_bb_ptr is null in apply_move." << std::endl;
         return; // Or throw an exception
     }
-
 
     // Toggle (XOR out) the piece's hash contribution from its original square.
     toggle_zobrist_piece(move.piece_moved_type_idx, active_player, from_sq);
@@ -431,7 +425,6 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
         }
         
         if (captured_piece_bb_ptr == nullptr) {
-            std::cerr << "CRITICAL ERROR: captured_piece_bb_ptr is null in apply_move." << std::endl;
             return;
         }
 
@@ -464,6 +457,7 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
             rook_to_sq = ChessBitboardUtils::F8_SQ;   // Black Kingside Rook's destination square.
             rook_bb_ptr = &black_rooks;
         }
+
         // Move the rook: clear from old, set to new, and toggle Zobrist hash.
         toggle_zobrist_piece(PieceTypeIndex::ROOK, active_player, rook_from_sq);
         ChessBitboardUtils::clear_bit(*rook_bb_ptr, rook_from_sq);
@@ -481,6 +475,7 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
             rook_to_sq = ChessBitboardUtils::D8_SQ;   // Black Queenside Rook's destination square.
             rook_bb_ptr = &black_rooks;
         }
+
         // Move the rook: clear from old, set to new, and toggle Zobrist hash.
         toggle_zobrist_piece(PieceTypeIndex::ROOK, active_player, rook_from_sq);
         ChessBitboardUtils::clear_bit(*rook_bb_ptr, rook_from_sq);
@@ -490,15 +485,14 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
 
     // 10. Handle Pawn Promotion.
     if (move.is_promotion) {
-        // First, remove the pawn from the board and from the Zobrist hash at the promotion square.
+        
+        // Remove the pawn from the board and from the Zobrist hash at the promotion square.
         // The pawn's hash at `to_sq` was added in step 7, so we need to remove it to replace with promoted piece.
         toggle_zobrist_piece(move.piece_moved_type_idx, active_player, to_sq); // Remove pawn hash
-        if (active_player == PlayerColor::White) {
-            ChessBitboardUtils::clear_bit(white_pawns, to_sq); // Clear pawn bit
-        } else {
-            ChessBitboardUtils::clear_bit(black_pawns, to_sq); // Clear pawn bit
-        }
-
+        
+        uint64_t* pawn_bb_ptr = (active_player == PlayerColor::White) ? &white_pawns : &black_pawns;
+        ChessBitboardUtils::clear_bit(*pawn_bb_ptr, to_sq); // Clear pawn bit
+        
         // Then, add the promoted piece (Queen, Knight, Rook, Bishop) to the target square.
         uint64_t* promoted_bb_ptr = nullptr; // Initialize for safety
         if (active_player == PlayerColor::White) {
@@ -524,7 +518,6 @@ void ChessBoard::apply_move(const Move& move, StateInfo& state_info) {
         }
 
         if (promoted_bb_ptr == nullptr) {
-            std::cerr << "CRITICAL ERROR: promoted_bb_ptr is null in apply_move (promotion)." << std::endl;
             return;
         }
 
@@ -621,7 +614,7 @@ void ChessBoard::undo_move(const Move& move, const StateInfo& state_info) {
     if (move.is_promotion) {
         // Remove the promoted piece (e.g., Queen) from `to_sq` from bitboard and hash.
         toggle_zobrist_piece(move.promotion_piece_type_idx, active_player, to_sq);
-        uint64_t* promoted_bb_ptr = nullptr; // Initialize for safety, not directly used to modify for undo, but for correct switch logic
+        uint64_t* promoted_bb_ptr = nullptr; // Initialize for safety
         
         if (active_player == PlayerColor::White) {
             switch (move.promotion_piece_type_idx) {
@@ -631,7 +624,9 @@ void ChessBoard::undo_move(const Move& move, const StateInfo& state_info) {
                 case PieceTypeIndex::QUEEN: promoted_bb_ptr = &white_queens; break;
                 default: break; // Should not happen
             }
-            if (promoted_bb_ptr) ChessBitboardUtils::clear_bit(*promoted_bb_ptr, to_sq); // Clear promoted piece
+            if (promoted_bb_ptr) {
+                ChessBitboardUtils::clear_bit(*promoted_bb_ptr, to_sq); // Clear promoted piece
+            }
             ChessBitboardUtils::set_bit(white_pawns, to_sq);       // Put pawn back
         } else { // Black
             switch (move.promotion_piece_type_idx) {
@@ -641,7 +636,9 @@ void ChessBoard::undo_move(const Move& move, const StateInfo& state_info) {
                 case PieceTypeIndex::QUEEN: promoted_bb_ptr = &black_queens; break;
                 default: break; // Should not happen
             }
-            if (promoted_bb_ptr) ChessBitboardUtils::clear_bit(*promoted_bb_ptr, to_sq); // Clear promoted piece
+            if (promoted_bb_ptr) {
+                ChessBitboardUtils::clear_bit(*promoted_bb_ptr, to_sq); // Clear promoted piece
+            }
             ChessBitboardUtils::set_bit(black_pawns, to_sq);       // Put pawn back
         }
         toggle_zobrist_piece(PieceTypeIndex::PAWN, active_player, to_sq); // Add pawn hash back
@@ -660,6 +657,7 @@ void ChessBoard::undo_move(const Move& move, const StateInfo& state_info) {
             rook_to_sq = ChessBitboardUtils::F8_SQ;
             rook_bb_ptr = &black_rooks;
         }
+
         toggle_zobrist_piece(PieceTypeIndex::ROOK, active_player, rook_to_sq); // Remove rook hash from F1/F8
         ChessBitboardUtils::clear_bit(*rook_bb_ptr, rook_to_sq);             // Clear rook from F1/F8
         ChessBitboardUtils::set_bit(*rook_bb_ptr, rook_from_sq);             // Set rook back to H1/H8
@@ -676,6 +674,7 @@ void ChessBoard::undo_move(const Move& move, const StateInfo& state_info) {
             rook_to_sq = ChessBitboardUtils::D8_SQ;
             rook_bb_ptr = &black_rooks;
         }
+        
         toggle_zobrist_piece(PieceTypeIndex::ROOK, active_player, rook_to_sq); // Remove rook hash from D1/D8
         ChessBitboardUtils::clear_bit(*rook_bb_ptr, rook_to_sq);             // Clear rook from D1/D8
         ChessBitboardUtils::set_bit(*rook_bb_ptr, rook_from_sq);             // Set rook back to A1/A8
@@ -708,7 +707,6 @@ void ChessBoard::undo_move(const Move& move, const StateInfo& state_info) {
     }
 
     if (moving_piece_bb_ptr == nullptr) {
-        std::cerr << "CRITICAL ERROR: moving_piece_bb_ptr is null in undo_move." << std::endl;
         return;
     }
 
@@ -718,11 +716,40 @@ void ChessBoard::undo_move(const Move& move, const StateInfo& state_info) {
     toggle_zobrist_piece(move.piece_moved_type_idx, active_player, from_sq); // Add hash back to old square
 
 
-    // 8. Restore Halfmove Clock and Fullmove Number (reverse step 3 in apply_move).
+    // 8. Restore Captured Piece (New logic)
+    if (state_info.captured_piece_type_idx != PieceTypeIndex::NONE) {
+        uint64_t* captured_piece_bb_ptr = nullptr;
+        if (state_info.captured_piece_color == PlayerColor::White) {
+            switch (state_info.captured_piece_type_idx) {
+                case PieceTypeIndex::PAWN: captured_piece_bb_ptr = &white_pawns; break;
+                case PieceTypeIndex::KNIGHT: captured_piece_bb_ptr = &white_knights; break;
+                case PieceTypeIndex::BISHOP: captured_piece_bb_ptr = &white_bishops; break;
+                case PieceTypeIndex::ROOK: captured_piece_bb_ptr = &white_rooks; break;
+                case PieceTypeIndex::QUEEN: captured_piece_bb_ptr = &white_queens; break;
+                default: break; // Should not happen for captured pieces
+            }
+        } else {
+            switch (state_info.captured_piece_type_idx) {
+                case PieceTypeIndex::PAWN: captured_piece_bb_ptr = &black_pawns; break;
+                case PieceTypeIndex::KNIGHT: captured_piece_bb_ptr = &black_knights; break;
+                case PieceTypeIndex::BISHOP: captured_piece_bb_ptr = &black_bishops; break;
+                case PieceTypeIndex::ROOK: captured_piece_bb_ptr = &black_rooks; break;
+                case PieceTypeIndex::QUEEN: captured_piece_bb_ptr = &black_queens; break;
+                default: break; // Should not happen for captured pieces
+            }
+        }
+
+        if (captured_piece_bb_ptr) {
+            ChessBitboardUtils::set_bit(*captured_piece_bb_ptr, state_info.captured_square_idx);
+            toggle_zobrist_piece(state_info.captured_piece_type_idx, state_info.captured_piece_color, state_info.captured_square_idx);
+        }
+    }
+
+    // 9. Restore Halfmove Clock and Fullmove Number (reverse step 3 in apply_move).
     halfmove_clock = state_info.previous_halfmove_clock;
     fullmove_number = state_info.previous_fullmove_number;
 
-    // 9. Update Occupancy Bitboards after all piece movements, captures, and promotions are reverted.
+    // 10. Update Occupancy Bitboards after all piece movements, captures, and promotions are reverted.
     white_occupied_squares = white_pawns | white_knights | white_bishops | white_rooks | white_queens | white_king;
     black_occupied_squares = black_pawns | black_knights | black_bishops | black_rooks | black_queens | black_king;
     occupied_squares = white_occupied_squares | black_occupied_squares;
@@ -738,7 +765,9 @@ void ChessBoard::undo_move(const Move& move, const StateInfo& state_info) {
 bool ChessBoard::is_king_in_check(PlayerColor king_color) const {
     uint64_t king_bitboard = (king_color == PlayerColor::White) ? white_king : black_king;
     // If for some reason the king bitboard is empty (e.g., in a test scenario), it cannot be in check.
-    if (king_bitboard == 0ULL) return false;
+    if (king_bitboard == 0ULL) {
+        return false;
+    }
 
     // Get the square index of the king. Assumes there's only one king for the given color.
     int king_sq = ChessBitboardUtils::get_lsb_index(king_bitboard); 
@@ -746,38 +775,42 @@ bool ChessBoard::is_king_in_check(PlayerColor king_color) const {
     // Determine the color of the potential attacking pieces (opposite of the king's color).
     PlayerColor attacking_color = (king_color == PlayerColor::White) ? PlayerColor::Black : PlayerColor::White;
 
-    // --- Check for attacks from various enemy piece types ---
-    // These `is_X_attacked_by` functions are implemented in ChessBitboardUtils.h/.cpp
-    // and use precomputed attack tables or sliding piece logic.
-
     // 1. Check for attacks from enemy Pawns.
     uint64_t enemy_pawns_bb = (attacking_color == PlayerColor::White) ? white_pawns : black_pawns;
-    if (ChessBitboardUtils::is_pawn_attacked_by(king_sq, enemy_pawns_bb, attacking_color)) return true;
+    if (ChessBitboardUtils::is_pawn_attacked_by(king_sq, enemy_pawns_bb, attacking_color)) {
+        return true;
+    }
 
     // 2. Check for attacks from enemy Knights.
     uint64_t enemy_knights_bb = (attacking_color == PlayerColor::White) ? white_knights : black_knights;
-    if (ChessBitboardUtils::is_knight_attacked_by(king_sq, enemy_knights_bb)) return true;
+    if (ChessBitboardUtils::is_knight_attacked_by(king_sq, enemy_knights_bb)) {
+        return true;
+    }
 
-    // 3. Check for attacks from enemy Kings (mainly for ensuring kings don't move into adjacent squares).
+    // 3. Check for attacks from enemy Kings.
     uint64_t enemy_king_bb = (attacking_color == PlayerColor::White) ? white_king : black_king;
-    if (ChessBitboardUtils::is_king_attacked_by(king_sq, enemy_king_bb)) return true;
+    if (ChessBitboardUtils::is_king_attacked_by(king_sq, enemy_king_bb)) {
+        return true;
+    }
 
     // 4. Check for attacks from Rooks and Queens (horizontal/vertical sliding attacks).
     uint64_t enemy_rooks_bb = (attacking_color == PlayerColor::White) ? white_rooks : black_rooks;
     uint64_t enemy_queens_bb = (attacking_color == PlayerColor::White) ? white_queens : black_queens;
-    // Combine their bitboards as they share attack patterns.
     uint64_t rook_queen_attackers = enemy_rooks_bb | enemy_queens_bb;
-    // `occupied_squares` is crucial here to determine if a sliding piece's attack path is blocked.
-    if (ChessBitboardUtils::is_rook_queen_attacked_by(king_sq, rook_queen_attackers, occupied_squares)) return true;
+    
+    if (ChessBitboardUtils::is_rook_queen_attacked_by(king_sq, rook_queen_attackers, occupied_squares)) {
+        return true;
+    }
 
     // 5. Check for attacks from Bishops and Queens (diagonal sliding attacks).
     uint64_t enemy_bishops_bb = (attacking_color == PlayerColor::White) ? white_bishops : black_bishops;
-    // Combine their bitboards.
     uint64_t bishop_queen_attackers = enemy_bishops_bb | enemy_queens_bb;
-    // Again, `occupied_squares` is needed for blocking.
-    if (ChessBitboardUtils::is_bishop_queen_attacked_by(king_sq, bishop_queen_attackers, occupied_squares)) return true;
+    
+    if (ChessBitboardUtils::is_bishop_queen_attacked_by(king_sq, bishop_queen_attackers, occupied_squares)) {
+        return true;
+    }
 
-    return false; // If no attacks found, the king is not in check.
+    return false;
 }
 
 // Helper to get the square index (0-63) of a specific piece type and color.

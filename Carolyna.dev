@@ -29,24 +29,24 @@ IncludeVersionInfo=1
 SupportXPThemes=0
 CompilerSet=6
 CompilerSettings=0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0
-UnitCount=12
+UnitCount=7
 
 [VersionInfo]
 Major=1
 Minor=0
 Release=0
-Build=17
+Build=32
 LanguageID=1033
 CharsetID=1252
 CompanyName=
-FileVersion=1.0.0.17
+FileVersion=1.0.0.32
 FileDescription=Developed using the Dev-C++ IDE
 InternalName=
 LegalCopyright=
 LegalTrademarks=
 OriginalFilename=
 ProductName=
-ProductVersion=1.0.0.17
+ProductVersion=1.0.0.32
 AutoIncBuildNr=1
 SyncProduct=1
 
@@ -61,17 +61,7 @@ OverrideBuildCmd=0
 BuildCmd=
 
 [Unit4]
-FileName=Constants.h
-CompileCpp=1
-Folder=
-Compile=1
-Link=1
-Priority=1000
-OverrideBuildCmd=0
-BuildCmd=
-
-[Unit2]
-FileName=ChessAI.cpp
+FileName=Types.h
 CompileCpp=1
 Folder=
 Compile=1
@@ -81,16 +71,6 @@ OverrideBuildCmd=0
 BuildCmd=
 
 [Unit3]
-FileName=ChessAI.h
-CompileCpp=1
-Folder=
-Compile=1
-Link=1
-Priority=1000
-OverrideBuildCmd=0
-BuildCmd=
-
-[Unit6]
 FileName=Move.h
 CompileCpp=1
 Folder=
@@ -100,18 +80,8 @@ Priority=1000
 OverrideBuildCmd=0
 BuildCmd=
 
-[Unit7]
-FileName=MoveGenerator.cpp
-CompileCpp=1
-Folder=
-Compile=1
-Link=1
-Priority=1000
-OverrideBuildCmd=0
-BuildCmd=
-
-[Unit8]
-FileName=MoveGenerator.h
+[Unit6]
+FileName=ChessBitboardUtils.h
 CompileCpp=1
 Folder=
 Compile=1
@@ -151,7 +121,7 @@ OverrideBuildCmd=0
 BuildCmd=
 
 [Unit13]
-FileName=UciHandler.h
+FileName=GameManager.cpp
 CompileCpp=1
 Folder=
 Compile=1
@@ -161,17 +131,7 @@ OverrideBuildCmd=0
 BuildCmd=
 
 [Unit14]
-FileName=ChessBitboardUtils.cpp
-CompileCpp=1
-Folder=
-Compile=1
-Link=1
-Priority=1000
-OverrideBuildCmd=0
-BuildCmd=
-
-[Unit15]
-FileName=ChessBitboardUtils.h
+FileName=GameManager.h
 CompileCpp=1
 Folder=
 Compile=1
@@ -181,7 +141,7 @@ OverrideBuildCmd=0
 BuildCmd=
 
 [Unit16]
-FileName=ChessBoard.cpp
+FileName=UciHandler.h
 CompileCpp=1
 Folder=
 Compile=1
@@ -191,7 +151,7 @@ OverrideBuildCmd=0
 BuildCmd=
 
 [Unit5]
-FileName=ChessBoard.h
+FileName=ChessBitboardUtils.cpp
 CompileCpp=1
 Folder=
 Compile=1
@@ -202,6 +162,26 @@ BuildCmd=
 
 [Unit10]
 FileName=ChessBitboardUtils.cpp
+CompileCpp=1
+Folder=
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit2]
+FileName=ChessBoard.h
+CompileCpp=1
+Folder=
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit7]
+FileName=ChessBoard.cpp
 CompileCpp=1
 Folder=
 Compile=1
