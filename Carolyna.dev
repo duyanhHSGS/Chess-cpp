@@ -29,24 +29,24 @@ IncludeVersionInfo=1
 SupportXPThemes=0
 CompilerSet=6
 CompilerSettings=0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0
-UnitCount=7
+UnitCount=9
 
 [VersionInfo]
 Major=1
 Minor=0
 Release=0
-Build=32
+Build=105
 LanguageID=1033
 CharsetID=1252
 CompanyName=
-FileVersion=1.0.0.32
+FileVersion=1.0.0.105
 FileDescription=Developed using the Dev-C++ IDE
 InternalName=
 LegalCopyright=
 LegalTrademarks=
 OriginalFilename=
 ProductName=
-ProductVersion=1.0.0.32
+ProductVersion=1.0.0.105
 AutoIncBuildNr=1
 SyncProduct=1
 
@@ -91,7 +91,7 @@ OverrideBuildCmd=0
 BuildCmd=
 
 [Unit9]
-FileName=Types.h
+FileName=MoveGenerator.h
 CompileCpp=1
 Folder=
 Compile=1
@@ -182,6 +182,16 @@ BuildCmd=
 
 [Unit7]
 FileName=ChessBoard.cpp
+CompileCpp=1
+Folder=
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit8]
+FileName=MoveGenerator.cpp
 CompileCpp=1
 Folder=
 Compile=1
