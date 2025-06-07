@@ -1,5 +1,5 @@
 #include "ChessBitboardUtils.h"
-#include "Move.h" // <--- ADDED: Include the full definition of Move
+#include "Move.h" // ADDED: Include the full definition of Move
 #include <iostream> 
 #include <vector>   
 #include <stdexcept> 
@@ -208,7 +208,7 @@ int ChessBitboardUtils::pop_lsb_index(uint64_t& bitboard) {
     return lsb_idx;
 }
 
-// Counts the number of set bits (pieces) in a bitboard.
+// Counts the number of set bits (population count) in a bitboard.
 int ChessBitboardUtils::count_set_bits(uint64_t bitboard) {
 #ifdef _MSC_VER
     return __popcnt64(bitboard); // Intrinsics for MSVC
@@ -279,8 +279,8 @@ std::string ChessBitboardUtils::move_to_string(const Move& move) {
 // Attack Detection Functions (Sliding Pieces)
 // ============================================================================
 
-// Generates a bitboard of squares attacked by a sliding piece from 'start_sq'
-// along a specific 'delta' direction, respecting 'occupied_bb' for blocking.
+// Generates sliding attacks (rook-like: horizontal and vertical) from a given square,
+// considering the occupied_squares bitboard for blocking.
 uint64_t ChessBitboardUtils::get_sliding_attacks(int start_sq, int delta, uint64_t occupied_bb) {
     uint64_t attacks = 0ULL;
     int current_sq = start_sq;
@@ -295,21 +295,27 @@ uint64_t ChessBitboardUtils::get_sliding_attacks(int start_sq, int delta, uint64
             break;
         }
 
-        // Handle wrapping for horizontal and vertical moves (rank/file consistency)
-        if (std::abs(delta) == 1 && square_to_rank(current_sq) != start_rank) { // Horizontal (left/right) moves
-            break;
-        }
-        if (std::abs(delta) == 8 && square_to_file(current_sq) != start_file) { // Vertical (up/down) moves
-            break;
-        }
-        // For diagonal moves, the rank and file change by the same absolute amount.
-        // If they don't, it implies a wrap-around for +/-7 and +/-9 deltas.
-        if ((std::abs(delta) == 7 || std::abs(delta) == 9) &&
-            (std::abs(static_cast<int>(square_to_rank(current_sq)) - static_cast<int>(start_rank)) != std::abs(current_sq - start_sq) / 8 ||
-             std::abs(static_cast<int>(square_to_file(current_sq)) - static_cast<int>(start_file)) != std::abs(current_sq - start_sq) % 8)) {
-            break;
-        }
+        uint8_t current_rank = square_to_rank(current_sq);
+        uint8_t current_file = square_to_file(current_sq);
 
+        // Handle wrapping for orthogonal moves (rank/file consistency)
+        if (std::abs(delta) == 1 && current_rank != start_rank) { // Horizontal (left/right) moves
+            break;
+        }
+        if (std::abs(delta) == 8 && current_file != start_file) { // Vertical (up/down) moves
+            break;
+        }
+        // Fix for diagonal moves wrapping
+        if (std::abs(delta) == 7 || std::abs(delta) == 9) { // It's a diagonal delta
+            // Check if the current square is on the same diagonal as the start square
+            // by comparing the absolute differences in rank and file from the start.
+            // If the absolute rank difference is not equal to the absolute file difference,
+            // it means the path has wrapped around the board.
+            if (std::abs(static_cast<int>(current_rank) - static_cast<int>(start_rank)) !=
+                std::abs(static_cast<int>(current_file) - static_cast<int>(start_file))) {
+                break; // Wrapped around
+            }
+        }
 
         attacks |= (1ULL << current_sq); // Add square to attacks
 

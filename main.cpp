@@ -39,6 +39,10 @@ int main() {
             // Use set_from_fen for robust initialization.
             board.set_from_fen("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
         } else if (command == "position") {
+            // DEBUGGING: Print the entire received position command
+            std::cerr << "DEBUG: command recieved, this is the recieved string: " << std::endl;
+            std::cerr << "DEBUG: " << line << std::endl; // Print the original line
+
             std::string sub_command;
             ss >> sub_command;
 
@@ -112,6 +116,17 @@ int main() {
             MoveGenerator move_gen;
             std::vector<Move> legal_moves = move_gen.generate_legal_moves(board); 
 
+            // DEBUGGING: Print the list of legal moves generated
+            std::cerr << "DEBUG: Legal Moves for " << ((board.active_player == PlayerColor::White) ? "White" : "Black") << " (" << legal_moves.size() << "):" << std::endl;
+            if (legal_moves.empty()) {
+                std::cerr << "DEBUG: No legal moves found." << std::endl;
+            } else {
+                for (size_t i = 0; i < legal_moves.size(); ++i) {
+                    std::cerr << ChessBitboardUtils::move_to_string(legal_moves[i]) << " ";
+                }
+                std::cerr << std::endl;
+            }
+
             if (legal_moves.empty()) {
                 std::cout << "bestmove (none)" << std::endl;
             } else {
@@ -130,3 +145,4 @@ int main() {
 
     return 0;
 }
+
