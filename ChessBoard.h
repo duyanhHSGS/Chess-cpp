@@ -3,10 +3,46 @@
 
 #include <cstdint> // For uint64_t
 #include <string>  // For std::string
-#include "Types.h" // Include our new types header for PlayerColor, GamePoint, PieceTypeIndex
+#include "Types.h" // Include our new types header for PlayerColor, GamePoint, PieceTypeIndex, GameStatus
 
 // Forward declaration of Move struct (defined in Move.h).
+// This is necessary if Move is used as a parameter type before Move.h is included.
 struct Move;
+// The forward declaration of MoveGenerator is no longer needed here
+// as ChessBoard no longer directly calls it for get_game_status().
+
+
+// The StateInfo struct encapsulates all necessary information to undo a move.
+// When apply_move is called, it fills one of these objects with the board's
+// state *before* the move. undo_move then uses this information to revert.
+struct StateInfo {
+    uint8_t previous_castling_rights_mask; // Original castling rights before the move.
+    int previous_en_passant_square_idx;    // Original en passant square before the move.
+    int previous_halfmove_clock;           // Original halfmove clock before the move.
+    int previous_fullmove_number;          // Original fullmove number before the move.
+    PlayerColor previous_active_player;    // Original active player before the move.
+    uint64_t previous_zobrist_hash_component; // Used to incrementally update hash (e.g., original en passant or castling hash part).
+                                            // More common is to just XOR the hash components in reverse order.
+                                            // For simplicity, we'll store specific components needed to revert.
+                                            // For Zobrist, it's often simpler to just XOR changes back directly.
+
+    // Captured piece information is critical for unmaking captures.
+    PieceTypeIndex captured_piece_type_idx; // Type of the captured piece (NONE if no capture).
+    PlayerColor captured_piece_color;       // Color of the captured piece (only valid if captured_piece_type_idx != NONE).
+    int captured_square_idx;                // The square the captured piece was on (differs for en passant).
+
+    // Default constructor to ensure members are initialized
+    StateInfo() : 
+        previous_castling_rights_mask(0), 
+        previous_en_passant_square_idx(64), // Default to no EP
+        previous_halfmove_clock(0), 
+        previous_fullmove_number(0),
+        previous_active_player(PlayerColor::White), // Default value
+        captured_piece_type_idx(PieceTypeIndex::NONE),
+        captured_piece_color(PlayerColor::White), // Default value
+        captured_square_idx(64) {} // Default to no capture
+};
+
 
 // The ChessBoard struct using bitboard representation.
 struct ChessBoard {
@@ -79,19 +115,24 @@ struct ChessBoard {
     void set_from_fen(const std::string& fen);
     // Converts the current board state to a FEN string.
     std::string to_fen() const;
+
     // Applies a given move to the board, updating all bitboards and game state flags.
-    // This method should handle captures, promotions, castling, and en passant.
-    // It also updates the Zobrist hash incrementally.
-    void apply_move(const Move& move);
+    // It also fills the provided StateInfo object with the board's state *before* the move.
+    void apply_move(const Move& move, StateInfo& state_info);
+
+    // Undoes a previously applied move, restoring the board to its state before the move.
+    // It uses the information from the provided StateInfo object (which was filled by apply_move).
+    void undo_move(const Move& move, const StateInfo& state_info);
 
     // Auxiliary Game Logic:
     // Determines if the king of the given color is currently in check.
     // Leverages bitboards for efficient attack detection.
     bool is_king_in_check(PlayerColor king_color) const;
+
     // Helper to get the square index (0-63) of a specific piece type and color.
     // Returns a special value (e.g., 64) if piece is not found.
     int get_piece_square_index(PieceTypeIndex piece_type_idx, PlayerColor piece_color) const;
-
+    
     // Zobrist-related Methods (grouped at the bottom for readability):
     // Initializes the static Zobrist keys (should be called once at program startup).
     static void initialize_zobrist_keys();
