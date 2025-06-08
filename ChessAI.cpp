@@ -1,505 +1,396 @@
-#include "ChessAI.h"          // Include the header for ChessAI itself
-#include "MoveGenerator.h"    // Needed to generate legal moves
-#include "Constants.h"        // To access AI_SEARCH_DEPTH, DEFAULT_AI_TYPE, etc.
-#include "ChessBitboardUtils.h" // For bitboard manipulation functions and move_to_string
+#include "ChessAI.h"
+#include "MoveGenerator.h"
+#include "Constants.h"
+#include "ChessBitboardUtils.h"
 
-#include <random>             // For std::random_device, std::mt19937_64, std::uniform_int_distribution
-#include <iostream>           // For std::cerr to output error or debug messages
-#include <vector>             // Required for std::vector to manage collections of moves
-#include <algorithm>          // Required for std::min, std::max (for evaluation/search)
-#include <chrono>             // For std::chrono to measure search time
+#include <random>
+#include <iostream>
+#include <vector>
+#include <algorithm>
+#include <chrono>
 
-// Constructor for ChessAI.
-// Initializes the random number generator used by the AI.
-// The `rng_engine` is a member of the ChessAI class, so it's initialized here
-// using `std::random_device` to ensure a non-deterministic seed for true randomness.
 ChessAI::ChessAI() : rng_engine(std::random_device{}()) {
-    // Initialize search statistics counters to zero.
-    // These are `std::atomic` variables, so direct assignment is fine.
-    // They will be reset per search by `findBestMove`.
-    nodes_evaluated_count = 0;
-    branches_explored_count = 0;
-    current_search_depth_set = 0;
+	nodes_evaluated_count = 0;
+	branches_explored_count = 0;
+	current_search_depth_set = 0;
 }
 
-/**
- * @brief Evaluates the given chess board position and returns a numerical score.
- *
- * This evaluation function now consistently returns a score from **White's perspective**.
- * A positive score indicates an advantage for White, and a negative score indicates
- * an advantage for Black.
- *
- * It currently only considers material. Future enhancements will include
- * positional factors (e.g., pawn structure, king safety, piece activity, mobility),
- * which add more chess-specific intelligence.
- *
- * @param board The chess board position to evaluate (const reference, as its state is not modified).
- * @return An integer representing the evaluation score, always from White's perspective.
- * Scores are typically given in centipawns (1/100th of a pawn), so a pawn is 100.
- *
- * Example Material Values (in centipawns):
- * Pawn:   100
- * Knight: 320
- * Bishop: 330
- * Rook:   500
- * Queen:  900
- */
 int ChessAI::evaluate(const ChessBoard& board) const {
-    int score = 0; // Initialize score to zero.
+	int score = 0;
 
-    // Define standard piece values in centipawns.
-    const int PAWN_VALUE   = 100;
-    const int KNIGHT_VALUE = 320;
-    const int BISHOP_VALUE = 330;
-    const int ROOK_VALUE   = 500;
-    const int QUEEN_VALUE  = 900;
+	const int PAWN_VALUE   = 100;
+	const int KNIGHT_VALUE = 320;
+	const int BISHOP_VALUE = 330;
+	const int ROOK_VALUE   = 500;
+	const int QUEEN_VALUE  = 900;
 
-    // Iterate through all 64 squares of the board to sum up material.
-    for (int i = 0; i < 64; ++i) {
-        // Add value for white pieces.
-        if (ChessBitboardUtils::test_bit(board.white_pawns, i))    score += PAWN_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.white_knights, i)) score += KNIGHT_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.white_bishops, i)) score += BISHOP_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.white_rooks, i))  score += ROOK_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.white_queens, i)) score += QUEEN_VALUE;
+	for (int i = 0; i < 64; ++i) {
+		if (ChessBitboardUtils::test_bit(board.white_pawns, i))    score += PAWN_VALUE;
+		else if (ChessBitboardUtils::test_bit(board.white_knights, i)) score += KNIGHT_VALUE;
+		else if (ChessBitboardUtils::test_bit(board.white_bishops, i)) score += BISHOP_VALUE;
+		else if (ChessBitboardUtils::test_bit(board.white_rooks, i))  score += ROOK_VALUE;
+		else if (ChessBitboardUtils::test_bit(board.white_queens, i)) score += QUEEN_VALUE;
 
-        // Subtract value for black pieces.
-        else if (ChessBitboardUtils::test_bit(board.black_pawns, i))   score -= PAWN_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.black_knights, i)) score -= KNIGHT_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.black_bishops, i)) score -= BISHOP_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.black_rooks, i))  score -= ROOK_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.black_queens, i)) score -= QUEEN_VALUE;
-    }
+		else if (ChessBitboardUtils::test_bit(board.black_pawns, i))   score -= PAWN_VALUE;
+		else if (ChessBitboardUtils::test_bit(board.black_knights, i)) score -= KNIGHT_VALUE;
+		else if (ChessBitboardUtils::test_bit(board.black_bishops, i)) score -= BISHOP_VALUE;
+		else if (ChessBitboardUtils::test_bit(board.black_rooks, i))  score -= ROOK_VALUE;
+		else if (ChessBitboardUtils::test_bit(board.black_queens, i)) score -= QUEEN_VALUE;
+	}
 
-    // The score is now always from White's perspective.
-    // Example: If White is up a pawn, score is +100. If Black is up a pawn, score is -100.
-    return score;
+	return score;
 }
 
-/**
- * @brief Implements the recursive Minimax search algorithm (in Negamax form).
- *
- * This function is implemented in a **Negamax** style. This means that at *every*
- * node, the function attempts to **maximize** the score for the `board.active_player`
- * at that specific node. The negation of the recursive call handles the alternating
- * turns correctly.
- *
- * @param board The current state of the chessboard (non-const reference).
- * @param depth The remaining depth to search. When depth reaches 0, the `evaluate`
- * function is called to get a static score.
- * @return The best score found for the `board.active_player` at the current node.
- * This score is from the perspective of the player whose turn it is at this `board` state.
- *
- */
 int ChessAI::minimax(ChessBoard& board, int depth) {
-    // Count this node as evaluated. `nodes_evaluated_count` is atomic for thread-safety.
-    nodes_evaluated_count++;
+	nodes_evaluated_count++;
 
-    // --- Base Case: Terminal Node or Max Depth Reached ---
-    // When the search depth is 0, we've reached the end of our search horizon.
-    // In this case, we statically evaluate the current board position.
-    if (depth == 0) {
-        int static_eval = evaluate(board); // Get score from White's perspective.
-        // Return score from the perspective of the *current active player* at this leaf node.
-        // If it's White's turn, return White's score. If it's Black's turn, return Black's score (-White's score).
-        if (board.active_player == PlayerColor::White) {
-            return static_eval; // White wants to maximize its own (White's) score.
-        } else {
-            return -static_eval; // Black wants to maximize its own (Black's) score, which is -White's score.
-        }
-    }
+	if (depth == 0) {
+		int static_eval = evaluate(board);
+		if (board.active_player == PlayerColor::White) {
+			return static_eval;
+		} else {
+			return -static_eval;
+		}
+	}
 
-    MoveGenerator move_gen;
-    std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
+	MoveGenerator move_gen;
+	std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
 
-    // Add the number of legal moves generated at this node to the total branches explored.
-    // `branches_explored_count` is atomic for thread-safety.
-    branches_explored_count += legal_moves.size();
+	branches_explored_count += legal_moves.size();
 
-    // If there are no legal moves from the current position, it's a terminal node.
-    // This could be checkmate, stalemate, or insufficient material (though not fully detected yet).
-    // In such cases, we evaluate the current board state directly.
-    if (legal_moves.empty()) {
-        // Special case for checkmate/stalemate should eventually be handled here.
-        // Assign very large positive/negative values for checkmate.
-        // For now, we use material evaluation as if it's a static position.
-        int static_eval = evaluate(board); // Score from White's perspective.
-        if (board.active_player == PlayerColor::White) {
-            return static_eval;
-        } else {
-            return -static_eval;
-        }
-    }
+	if (legal_moves.empty()) {
+		int static_eval = evaluate(board);
+		if (board.active_player == PlayerColor::White) {
+			return static_eval;
+		} else {
+			return -static_eval;
+		}
+	}
 
-    // Initialize `best_eval` to negative infinity for the current player.
-    // Every call to `minimax` (in Negamax) tries to maximize its own score.
-    int best_eval = -99999999; 
+	int best_eval = -99999999;
 
-    // Iterate through all legal moves from the current position.
-    for (const auto& move : legal_moves) {
-        StateInfo info_for_undo; // Store board state before applying the move.
+	for (const auto& move : legal_moves) {
+		StateInfo info_for_undo;
 
-        // Apply the current move to the board.
-        // This advances the game state. Crucially, `board.active_player` flips to the opponent.
-        board.apply_move(move, info_for_undo);
+		board.apply_move(move, info_for_undo);
 
-        // Recursively call `minimax` for the next level (depth - 1).
-        // The recursive call `minimax(board, depth - 1)` will now operate from the *opponent's* perspective
-        // (since the opponent is now the `board.active_player`).
-        // It will return the best score for the opponent from their perspective.
-        // To get this score back to *our* perspective for comparison, we negate it.
-        // This is the core of the Negamax principle: `score = -minimax(opponent_state, depth-1)`.
-        int eval = -minimax(board, depth - 1); 
+		int eval = -minimax(board, depth - 1);
 
-        // Update `best_eval` if the current move leads to a better score for the current player.
-        best_eval = std::max(best_eval, eval);
+		best_eval = std::max(best_eval, eval);
 
-        // Undo the move to restore the board to its original state.
-        // This is vital for correctly exploring all other branches from this node.
-        board.undo_move(move, info_for_undo);
-    }
-    return best_eval; // Return the maximum score found for the current player at this node.
+		board.undo_move(move, info_for_undo);
+	}
+	return best_eval;
 }
 
-/**
- * @brief Finds and returns the best legal move for the current active player on the given board.
- * This is the primary interface for the GameManager to request a move from the AI.
- *
- * This function's behavior is determined by the `DEFAULT_AI_TYPE` constant from `Constants.h`.
- *
- * @param board A non-constant reference to the current ChessBoard state.
- * This is crucial because the search algorithm will temporarily `apply_move()` and `undo_move()`
- * on this board object to explore different game lines.
- * @return The calculated best legal move. If no legal moves are found (e.g.,
- * due to checkmate or stalemate), it returns a default-constructed,
- * invalid `Move` (where `piece_moved_type_idx` is `PieceTypeIndex::NONE`).
- */
+int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta) {
+	nodes_evaluated_count++;
+
+	if (depth == 0) {
+		return (board.active_player == PlayerColor::White) ? evaluate(board) : -evaluate(board);
+	}
+
+	MoveGenerator move_gen;
+	std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
+
+	branches_explored_count += legal_moves.size();
+
+	if (legal_moves.empty()) {
+		return (board.active_player == PlayerColor::White) ? evaluate(board) : -evaluate(board);
+	}
+
+	for (const auto& move : legal_moves) {
+		StateInfo info_for_undo;
+
+		board.apply_move(move, info_for_undo);
+
+		int score = -alphaBeta(board, depth - 1, -beta, -alpha);
+
+		board.undo_move(move, info_for_undo);
+
+		if (score >= beta) {
+			return beta;
+		}
+		if (score > alpha) {
+			alpha = score;
+		}
+	}
+	return alpha;
+}
+
 Move ChessAI::findBestMove(ChessBoard& board) {
-    // Reset search statistics for this new top-level search.
-    nodes_evaluated_count = 0;
-    branches_explored_count = 0;
-    current_search_depth_set = AI_SEARCH_DEPTH; // Store the initial depth for reporting.
+	nodes_evaluated_count = 0;
+	branches_explored_count = 0;
+	current_search_depth_set = AI_SEARCH_DEPTH;
 
-    MoveGenerator move_gen; // Create an instance of the MoveGenerator to generate legal moves.
+	MoveGenerator move_gen;
 
-    // Generate all legal moves for the current board state.
-    // This is the essential first step for any chess AI, as it can only consider valid moves.
-    std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
+	std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
 
-    // Handle the case where there are no legal moves available.
-    // This signifies a game termination condition (checkmate or stalemate).
-    if (legal_moves.empty()) {
-        std::cerr << "DEBUG: ChessAI: No legal moves found. Game is likely over (checkmate or stalemate)." << std::endl;
-        return Move({0,0}, {0,0}, PieceTypeIndex::NONE); // Return a default/invalid move to signal no move.
-    }
+	if (legal_moves.empty()) {
+		std::cerr << "DEBUG: ChessAI: No legal moves found. Game is likely over (checkmate or stalemate)." << std::endl;
+		return Move({0,0}, {0,0}, PieceTypeIndex::NONE);
+	}
 
-    // Use a `switch` statement based on the `DEFAULT_AI_TYPE` from `Constants.h`.
-    // This allows for easy selection and testing of different AI behaviors.
-    switch (DEFAULT_AI_TYPE) {
-        case AIType::RANDOM_MOVER: {
-            // --- Single-threaded Random Mover Implementation ---
-            // This is the simplest AI behavior: it just picks a random legal move.
-            
-            // Create a uniform distribution to select a random index within the bounds of `legal_moves`.
-            std::uniform_int_distribution<size_t> dist(0, legal_moves.size() - 1);
-            
-            // Select a random move using the ChessAI's main random number engine (`rng_engine`).
-            Move chosen_move = legal_moves[dist(rng_engine)]; 
-            
-            // Output to standard error (cerr) for debugging purposes.
-            std::cerr << "DEBUG: ChessAI (Random): Chose move: " << ChessBitboardUtils::move_to_string(chosen_move) << std::endl;
-            
-            return chosen_move; // Return the randomly chosen move.
-        }
-        case AIType::SIMPLE_EVALUATION: {
-            // --- Simple Evaluation (1-Ply Search) Implementation ---
-            // This AI will look one move ahead, evaluate each resulting position using
-            // the `evaluate` function, and choose the move that leads to the best score.
-            // This is a greedy approach and forms the foundation for more advanced searches.
+	switch (DEFAULT_AI_TYPE) {
+		case AIType::RANDOM_MOVER: {
+			std::uniform_int_distribution<size_t> dist(0, legal_moves.size() - 1);
+			Move chosen_move = legal_moves[dist(rng_engine)];
+			std::cerr << "DEBUG: ChessAI (Random): Chose move: " << ChessBitboardUtils::move_to_string(chosen_move) << std::endl;
+			return chosen_move;
+		}
+		case AIType::SIMPLE_EVALUATION: {
+			PlayerColor original_active_player = board.active_player;
 
-            // Store the active player *before* considering any moves.
-            // This is crucial because `evaluate` now returns a score from White's perspective,
-            // and we need to know if we are maximizing (White) or minimizing (Black) that score.
-            PlayerColor original_active_player = board.active_player;
+			int best_score;
+			std::vector<Move> best_moves_candidates;
 
-            // Initialize `best_score` and a vector to hold moves that achieve this best score.
-            int best_score;
-            std::vector<Move> best_moves_candidates; // To store moves that are tied for the best score.
+			if (original_active_player == PlayerColor::White) {
+				best_score = -999999;
+			} else {
+				best_score = 999999;
+			}
 
-            // Set initial `best_score` based on whether we are maximizing or minimizing.
-            // If it's White's turn, we want the highest score from White's perspective.
-            // If it's Black's turn, we want the lowest score from White's perspective.
-            if (original_active_player == PlayerColor::White) {
-                best_score = -999999; // Initialize to negative infinity for maximizing.
-            } else { // original_active_player == PlayerColor::Black
-                best_score = 999999;  // Initialize to positive infinity for minimizing.
-            }
-            
-            // Iterate through each legal move.
-            for (const auto& move : legal_moves) {
-                StateInfo info_for_undo; // Object to store the board state *before* applying the move.
+			for (const auto& move : legal_moves) {
+				StateInfo info_for_undo;
 
-                // Temporarily apply the current move to the board.
-                // After this call, `board.active_player` will be the opponent's color.
-                board.apply_move(move, info_for_undo);
+				board.apply_move(move, info_for_undo);
 
-                // Evaluate the new board position.
-                // `evaluate(board)` now *always* returns a score from White's perspective.
-                int current_score_from_white_perspective = evaluate(board); 
+				int current_score_from_white_perspective = evaluate(board);
 
-                // Determine whether to maximize (for White) or minimize (for Black)
-                // the `current_score_from_white_perspective`.
-                if (original_active_player == PlayerColor::White) {
-                    // White wants to maximize its score (i.e., maximize the score from White's perspective).
-                    if (current_score_from_white_perspective > best_score) {
-                        best_score = current_score_from_white_perspective;
-                        best_moves_candidates.clear(); // Clear old candidates as we found a new best score.
-                        best_moves_candidates.push_back(move);
-                    } else if (current_score_from_white_perspective == best_score) {
-                        // If it's a tie for the best score, add this move to the candidates.
-                        best_moves_candidates.push_back(move);
-                    }
-                } else { // original_active_player == PlayerColor::Black
-                    // Black wants to minimize White's score (which means maximizing its own score).
-                    if (current_score_from_white_perspective < best_score) {
-                        best_score = current_score_from_white_perspective;
-                        best_moves_candidates.clear(); // Clear old candidates as we found a new best score.
-                        best_moves_candidates.push_back(move);
-                    } else if (current_score_from_white_perspective == best_score) {
-                        // If it's a tie for the best score, add this move to the candidates.
-                        best_moves_candidates.push_back(move);
-                    }
-                }
+				if (original_active_player == PlayerColor::White) {
+					if (current_score_from_white_perspective > best_score) {
+						best_score = current_score_from_white_perspective;
+						best_moves_candidates.clear();
+						best_moves_candidates.push_back(move);
+					} else if (current_score_from_white_perspective == best_score) {
+						best_moves_candidates.push_back(move);
+					}
+				} else {
+					if (current_score_from_white_perspective < best_score) {
+						best_score = current_score_from_white_perspective;
+						best_moves_candidates.clear();
+						best_moves_candidates.push_back(move);
+					} else if (current_score_from_white_perspective == best_score) {
+						best_moves_candidates.push_back(move);
+					}
+				}
 
-                // Crucial: Undo the move to restore the board to its original state for the next iteration.
-                board.undo_move(move, info_for_undo);
-            }
+				board.undo_move(move, info_for_undo);
+			}
 
-            // Initialize final_chosen_move with a valid default (invalid) move.
-            Move final_chosen_move = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
-            
-            if (!best_moves_candidates.empty()) {
-                // If multiple moves are tied for the best score, randomly pick one among them.
-                // This breaks deterministic play when material scores are equal.
-                std::uniform_int_distribution<size_t> dist(0, best_moves_candidates.size() - 1);
-                final_chosen_move = best_moves_candidates[dist(rng_engine)];
-            } else {
-                // This case should theoretically not be reached if `legal_moves` was not empty.
-                // It means no valid best move candidate was found. The default-initialized
-                // `final_chosen_move` will be returned.
-                std::cerr << "DEBUG: ChessAI (Simple Evaluation): No best candidates found, returning default invalid move (fallback)." << std::endl;
-            }
+			Move final_chosen_move = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
 
-            // Output for debugging.
-            std::cerr << "DEBUG: ChessAI (Simple Evaluation): Chose move: " << ChessBitboardUtils::move_to_string(final_chosen_move) 
-                      << " with score (White's perspective): " << best_score << std::endl;
-            return final_chosen_move; // Return the chosen move.
-        }
-        case AIType::MINIMAX: {
-            // --- Minimax Search Implementation (Multi-threaded Root) ---
-            // This section implements the Minimax search, with root moves parallelized
-            // using `std::async` to potentially utilize multiple CPU cores.
+			if (!best_moves_candidates.empty()) {
+				std::uniform_int_distribution<size_t> dist(0, best_moves_candidates.size() - 1);
+				final_chosen_move = best_moves_candidates[dist(rng_engine)];
+			} else {
+				std::cerr << "DEBUG: ChessAI (Simple Evaluation): No best candidates found, returning default invalid move (fallback)." << std::endl;
+			}
 
-            // Reset search statistics for this new top-level search.
-            // These are atomic variables and are thread-safe for concurrent updates from minimax calls.
-            nodes_evaluated_count = 0;
-            branches_explored_count = 0;
-            current_search_depth_set = AI_SEARCH_DEPTH; // Store the initial depth for reporting.
+			std::cerr << "DEBUG: ChessAI (Simple Evaluation): Chose move: " << ChessBitboardUtils::move_to_string(final_chosen_move)
+			          << " with score (White's perspective): " << best_score << std::endl;
+			return final_chosen_move;
+		}
+		case AIType::MINIMAX: {
+			nodes_evaluated_count = 0;
+			branches_explored_count = 0;
+			current_search_depth_set = AI_SEARCH_DEPTH;
 
-            // Store the active player *before* initiating the search.
-            // This player is the "root" player for whom we are finding the best move.
-            PlayerColor original_active_player = board.active_player;
+			PlayerColor original_active_player = board.active_player;
 
-            Move final_chosen_move = Move({0,0}, {0,0}, PieceTypeIndex::NONE); // Initialize with an invalid move.
-            int best_eval = -99999999; // Initialize to negative infinity for the root maximizing player.
-            
-            // Record the start time of the search for performance metrics.
-            auto start_time = std::chrono::high_resolution_clock::now();
+			Move final_chosen_move = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
+			int best_eval = -99999999;
 
-            if (NUMBER_OF_CORES_USED == 1) {
-                // --- Single-threaded Minimax execution ---
-                // This path ensures strictly sequential execution when NUMBER_OF_CORES_USED is 1.
-                
-                size_t best_move_index = 0; // Index of the best move in `legal_moves`.
+			auto start_time = std::chrono::high_resolution_clock::now();
 
-                // Iterate through each of the legal moves from the current position (the root node).
-                for (size_t i = 0; i < legal_moves.size(); ++i) {
-                    StateInfo info_for_undo; // Store board state before applying the move.
+			if (NUMBER_OF_CORES_USED == 1) {
 
-                    // Apply the move to the board. `board.active_player` flips to the opponent.
-                    board.apply_move(legal_moves[i], info_for_undo);
+				size_t best_move_index = 0;
 
-                    // Recursively call the `minimax` function for the next level of the search.
-                    // `AI_SEARCH_DEPTH - 1` because one ply has already been consumed by applying `move`.
-                    // The `minimax` function will return a score from the perspective of the `board.active_player`
-                    // (which is now the opponent).
-                    // Therefore, we negate the result to get the score from *our* `original_active_player`'s perspective.
-                    int current_eval = -minimax(board, AI_SEARCH_DEPTH - 1); 
+				for (size_t i = 0; i < legal_moves.size(); ++i) {
+					StateInfo info_for_undo;
 
-                    // Compare `current_eval` (which is now from `original_active_player`'s perspective)
-                    // with `best_eval` to find the optimal move at the root.
-                    // At the root, we always maximize the score for the `original_active_player`.
-                    if (current_eval > best_eval) {
-                        best_eval = current_eval;
-                        best_move_index = i;
-                    }
-                    // For single-threaded, we don't need a `best_moves_candidates` vector if we just pick the first best.
-                    // If tie-breaking is desired, a simple random choice can be added if multiple moves yield `best_eval`.
+					board.apply_move(legal_moves[i], info_for_undo);
 
-                    // Undo the move to restore the board for the next iteration of the root moves.
-                    board.undo_move(legal_moves[i], info_for_undo);
-                }
-                final_chosen_move = legal_moves[best_move_index];
+					int current_eval = -minimax(board, AI_SEARCH_DEPTH - 1);
 
-            } else {
-                // --- Multi-threaded Minimax execution (NUMBER_OF_CORES_USED > 1) ---
-                size_t best_move_index = 0; // Index of the best move in `legal_moves`.
-                std::vector<std::pair<int, size_t>> results_from_threads; // Store results from futures
+					if (current_eval > best_eval) {
+						best_eval = current_eval;
+						best_move_index = i;
+					}
 
-                // Decide between "one task per move" or "partitioned tasks"
-                if (legal_moves.size() <= NUMBER_OF_CORES_USED) { 
-                    // Launch one async task per move. This is suitable when the number of moves
-                    // is small or roughly equal to the number of available cores.
-                    std::vector<std::future<std::pair<int, size_t>>> futures;
-                    for (size_t i = 0; i < legal_moves.size(); ++i) {
-                        // Launch an asynchronous task for each legal root move.
-                        // The lambda captures `this` (to call `minimax`), `i` (move index), and `board` by value.
-                        // Capturing `board` by value ensures each thread gets its own copy of the board state
-                        // to work on, preventing race conditions on the main board object.
-                        futures.push_back(std::async(std::launch::async, 
-                                                    [this, i, board, legal_moves]() -> std::pair<int, size_t> {
-                            ChessBoard board_copy = board; // Create a deep copy of the board for this thread.
-                            StateInfo info;
-                            board_copy.apply_move(legal_moves[i], info); // Apply the root move on the copy.
-                            
-                            // Evaluate the move by calling minimax recursively.
-                            // We negate the result as minimax returns score for the current player of that node
-                            // (which is the opponent's perspective after applying the root move).
-                            int eval = -minimax(board_copy, AI_SEARCH_DEPTH - 1);
-                            return std::make_pair(eval, i); // Return evaluation and original move index.
-                        }));
-                    }
-                    // Gather results from all launched futures.
-                    // `f.get()` blocks until the corresponding task completes.
-                    for (auto &f : futures) {
-                        results_from_threads.push_back(f.get());
-                    }
-                } else {
-                    // Partition moves into `NUMBER_OF_CORES_USED` groups.
-                    // This is used when the number of legal moves is significantly larger
-                    // than the number of available cores, to avoid excessive thread creation.
-                    unsigned int num_threads_to_use = NUMBER_OF_CORES_USED;
-                    size_t moves_per_thread = legal_moves.size() / num_threads_to_use;
-                    size_t current_move_idx = 0;
-                    std::vector<std::future<std::pair<int, size_t>>> futures;
+					board.undo_move(legal_moves[i], info_for_undo);
+				}
+				final_chosen_move = legal_moves[best_move_index];
 
-                    for (unsigned int i = 0; i < num_threads_to_use; ++i) {
-                        size_t start_idx = current_move_idx;
-                        // Determine the end index for this thread's subset of moves.
-                        // The last thread gets any remaining moves to ensure all are covered.
-                        size_t end_idx = (i == num_threads_to_use - 1) ? legal_moves.size() : (start_idx + moves_per_thread);
+			} else {
+				size_t best_move_index = 0;
+				std::vector<std::pair<int, size_t>> results_from_threads;
 
-                        // Launch an asynchronous task.
-                        // The lambda captures `this`, `start_idx`, `end_idx`, and `board` by value.
-                        futures.push_back(std::async(std::launch::async,
-                            [this, start_idx, end_idx, board, legal_moves]() -> std::pair<int, size_t> {
-                                // Each thread maintains its own local best_eval and best_index for its assigned subset.
-                                int local_best_eval = -99999999;
-                                size_t local_best_index = start_idx; // Default to the first move in its subset.
+				if (legal_moves.size() <= NUMBER_OF_CORES_USED) {
+					std::vector<std::future<std::pair<int, size_t>>> futures;
+					for (size_t i = 0; i < legal_moves.size(); ++i) {
+						futures.push_back(std::async(std::launch::async,
+						[this, i, board, legal_moves]() -> std::pair<int, size_t> {
+							ChessBoard board_copy = board;
+							StateInfo info;
+							board_copy.apply_move(legal_moves[i], info);
 
-                                // Iterate only over the subset of moves assigned to this thread.
-                                for (size_t j = start_idx; j < end_idx; ++j) {
-                                    // Create a deep copy of the board for this move.
-                                    ChessBoard board_copy = board;
-                                    StateInfo info;
-                                    board_copy.apply_move(legal_moves[j], info); // Apply the root move on the copy.
-                                    
-                                    // Evaluate the move with recursive depth search.
-                                    // Negate the minimax result to align perspective.
-                                    int eval = -minimax(board_copy, AI_SEARCH_DEPTH - 1);
-                                    
-                                    if (eval > local_best_eval) {
-                                        local_best_eval = eval;
-                                        local_best_index = j;
-                                    }
-                                }
-                                return std::make_pair(local_best_eval, local_best_index); // Return best from this subset.
-                            }
-                        ));
-                        current_move_idx = end_idx; // Update index for the next thread's starting point.
-                    }
-                    // Combine results from the different threads.
-                    for (auto &f : futures) {
-                        results_from_threads.push_back(f.get());
-                    }
-                }
-                
-                // After all threads/tasks complete, determine the overall best move from results_from_threads
-                // This part needs to process `results_from_threads`
-                // And pick one move, possibly with random tie-breaking.
-                
-                std::vector<Move> best_moves_candidates; // To handle ties for the optimal score at the root.
-                
-                // Find the overall best move from the results collected from all threads.
-                for (const auto& result : results_from_threads) {
-                    if (result.first > best_eval) {
-                        best_eval = result.first;
-                        best_moves_candidates.clear(); // New best found, clear previous candidates
-                        best_moves_candidates.push_back(legal_moves[result.second]);
-                    } else if (result.first == best_eval) {
-                        best_moves_candidates.push_back(legal_moves[result.second]); // Add tied move
-                    }
-                }
+							int eval = -minimax(board_copy, AI_SEARCH_DEPTH - 1);
+							return std::make_pair(eval, i);
+						}));
+					}
+					for (auto &f : futures) {
+						results_from_threads.push_back(f.get());
+					}
+				} else {
+					unsigned int num_threads_to_use = NUMBER_OF_CORES_USED;
+					size_t moves_per_thread = legal_moves.size() / num_threads_to_use;
+					size_t current_move_idx = 0;
+					std::vector<std::future<std::pair<int, size_t>>> futures;
 
-                if (!best_moves_candidates.empty()) {
-                    // If multiple moves are tied for the best score at the root, randomly pick one.
-                    std::uniform_int_distribution<size_t> dist(0, best_moves_candidates.size() - 1);
-                    final_chosen_move = best_moves_candidates[dist(rng_engine)];
-                } else {
-                    // Fallback: This case should not be reached if legal_moves was not empty.
-                    std::cerr << "DEBUG: ChessAI (Minimax Multithreaded): No best candidates found, returning default invalid move (fallback)." << std::endl;
-                }
-            }
+					for (unsigned int i = 0; i < num_threads_to_use; ++i) {
+						size_t start_idx = current_move_idx;
+						size_t end_idx = (i == num_threads_to_use - 1) ? legal_moves.size() : (start_idx + moves_per_thread);
 
-            // Record the end time and compute search duration.
-            auto end_time = std::chrono::high_resolution_clock::now();
-            auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
-            long long duration_ms = duration_microseconds.count() / 1000;
+						futures.push_back(std::async(std::launch::async,
+						[this, start_idx, end_idx, board, legal_moves]() -> std::pair<int, size_t> {
+							int local_best_eval = -99999999;
+							size_t local_best_index = start_idx;
 
-            // Calculate Nodes Per Second (NPS).
-            long long nodes_per_second = 0;
-            if (duration_ms > 0) { // Avoid division by zero
-                nodes_per_second = (nodes_evaluated_count * 1000) / duration_ms;
-            } else if (nodes_evaluated_count > 0) {
-                // If duration is 0ms but nodes were evaluated, imply very high NPS.
-                // This might happen for very shallow searches or extremely fast systems.
-                nodes_per_second = nodes_evaluated_count * 1000000; 
-            }
+							for (size_t j = start_idx; j < end_idx; ++j) {
+								ChessBoard board_copy = board;
+								StateInfo info;
+								board_copy.apply_move(legal_moves[j], info);
 
-            // Report search statistics.
-            std::cerr << "DEBUG: ChessAI (Minimax " << (NUMBER_OF_CORES_USED == 1 ? "Single-threaded" : "Multithreaded") << "): Completed search to depth " << current_search_depth_set
-                      << ". Nodes: " << nodes_evaluated_count
-                      << ", Branches: " << branches_explored_count
-                      << ", Time: " << duration_ms << "ms"
-                      << ", NPS: " << nodes_per_second << std::endl;
-            
-            // Output the chosen move and its score.
-            std::cerr << "DEBUG: ChessAI (Minimax " << (NUMBER_OF_CORES_USED == 1 ? "Single-threaded" : "Multithreaded") << "): Chose move: "
-                      << ChessBitboardUtils::move_to_string(final_chosen_move)
-                      << " with score (current player's perspective at root): " << best_eval << std::endl;
-            
-            return final_chosen_move;
-        }
-        default:
-            // Handle any unconfigured or unknown AI types as a fallback.
-            std::cerr << "DEBUG: ChessAI: Unknown AIType configured. Falling back to random." << std::endl;
-            // Fallback to random if an unknown AIType is specified.
-            {
-                std::uniform_int_distribution<size_t> dist(0, legal_moves.size() - 1);
-                Move chosen_move = legal_moves[dist(rng_engine)];
-                std::cerr << "DEBUG: ChessAI (Fallback from Unknown AIType): Chose move: " 
-                          << ChessBitboardUtils::move_to_string(chosen_move) << std::endl;
-                return chosen_move;
-            }
-    }
+								int eval = -minimax(board_copy, AI_SEARCH_DEPTH - 1);
+
+								if (eval > local_best_eval) {
+									local_best_eval = eval;
+									local_best_index = j;
+								}
+							}
+							return std::make_pair(local_best_eval, local_best_index);
+						}
+						                            ));
+						current_move_idx = end_idx;
+					}
+					for (auto &f : futures) {
+						results_from_threads.push_back(f.get());
+					}
+				}
+
+				std::vector<Move> best_moves_candidates;
+
+				for (const auto& result : results_from_threads) {
+					if (result.first > best_eval) {
+						best_eval = result.first;
+						best_moves_candidates.clear();
+						best_moves_candidates.push_back(legal_moves[result.second]);
+					} else if (result.first == best_eval) {
+						best_moves_candidates.push_back(legal_moves[result.second]);
+					}
+				}
+
+				if (!best_moves_candidates.empty()) {
+					std::uniform_int_distribution<size_t> dist(0, best_moves_candidates.size() - 1);
+					final_chosen_move = best_moves_candidates[dist(rng_engine)];
+				} else {
+					std::cerr << "DEBUG: ChessAI (Minimax Multithreaded): No best candidates found, returning default invalid move (fallback)." << std::endl;
+				}
+			}
+
+			auto end_time = std::chrono::high_resolution_clock::now();
+			auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+			long long duration_ms = duration_microseconds.count() / 1000;
+
+			long long nodes_per_second = 0;
+			if (duration_ms > 0) {
+				nodes_per_second = (nodes_evaluated_count * 1000) / duration_ms;
+			} else if (nodes_evaluated_count > 0) {
+				nodes_per_second = nodes_evaluated_count * 1000000;
+			}
+
+			std::cerr << "DEBUG: ChessAI (Minimax " << (NUMBER_OF_CORES_USED == 1 ? "Single-threaded" : "Multithreaded") << "): Completed search to depth " << current_search_depth_set
+			          << ". Nodes: " << nodes_evaluated_count
+			          << ", Branches: " << branches_explored_count
+			          << ", Time: " << duration_ms << "ms"
+			          << ", NPS: " << nodes_per_second << std::endl;
+
+			std::cerr << "DEBUG: ChessAI (Minimax " << (NUMBER_OF_CORES_USED == 1 ? "Single-threaded" : "Multithreaded") << "): Chose move: "
+			          << ChessBitboardUtils::move_to_string(final_chosen_move)
+			          << " with score (current player's perspective at root): " << best_eval << std::endl;
+
+			return final_chosen_move;
+		}
+		case AIType::ALPHA_BETA: {
+			nodes_evaluated_count = 0;
+			branches_explored_count = 0;
+			current_search_depth_set = AI_SEARCH_DEPTH;
+
+			PlayerColor original_active_player = board.active_player;
+
+			Move final_chosen_move = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
+			int best_eval = -99999999;
+
+			int alpha = -99999999;
+			int beta = 99999999;
+
+			auto start_time = std::chrono::high_resolution_clock::now();
+
+			for (const auto& move : legal_moves) {
+				StateInfo info_for_undo;
+
+				board.apply_move(move, info_for_undo);
+
+				int current_score = -alphaBeta(board, AI_SEARCH_DEPTH - 1, -beta, -alpha);
+
+				board.undo_move(move, info_for_undo);
+
+				if (current_score > best_eval) {
+					best_eval = current_score;
+					final_chosen_move = move;
+				}
+
+				alpha = std::max(alpha, current_score);
+
+				if (alpha >= beta) {
+					break;
+				}
+			}
+
+			auto end_time = std::chrono::high_resolution_clock::now();
+			auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+			long long duration_ms = duration_microseconds.count() / 1000;
+
+			long long nodes_per_second = 0;
+			if (duration_ms > 0) {
+				nodes_per_second = (nodes_evaluated_count * 1000) / duration_ms;
+			} else if (nodes_evaluated_count > 0) {
+				nodes_per_second = nodes_evaluated_count * 1000000;
+			}
+
+			std::cerr << "DEBUG: ChessAI (Alpha-Beta Single-threaded): Completed search to depth " << current_search_depth_set
+			          << ". Nodes: " << nodes_evaluated_count
+			          << ", Branches: " << branches_explored_count
+			          << ", Time: " << duration_ms << "ms"
+			          << ", NPS: " << nodes_per_second << std::endl;
+
+			std::cerr << "DEBUG: ChessAI (Alpha-Beta Single-threaded): Chose move: "
+			          << ChessBitboardUtils::move_to_string(final_chosen_move)
+			          << " with score (current player's perspective at root): " << best_eval << std::endl;
+
+			return final_chosen_move;
+		}
+		default:
+			std::cerr << "DEBUG: ChessAI: Unknown AIType configured. Falling back to random." << std::endl;
+			{
+				std::uniform_int_distribution<size_t> dist(0, legal_moves.size() - 1);
+				Move chosen_move = legal_moves[dist(rng_engine)];
+				std::cerr << "DEBUG: ChessAI (Fallback from Unknown AIType): Chose move: "
+				          << ChessBitboardUtils::move_to_string(chosen_move) << std::endl;
+				return chosen_move;
+			}
+	}
 }
