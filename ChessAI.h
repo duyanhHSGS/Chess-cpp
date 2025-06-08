@@ -53,20 +53,36 @@ private:
 
     /**
      * @brief Evaluates the given chess board position and returns a numerical score.
-     * A higher score indicates a better position for the active player.
      *
-     * This is a placeholder evaluation function and currently only considers material.
-     * Future enhancements will include positional factors, king safety, pawn structure, etc.
+     * This evaluation function now consistently returns a score from **White's perspective**.
+     * A positive score indicates an advantage for White, and a negative score indicates
+     * an advantage for Black.
      *
-     * @param board The chess board position to evaluate (const reference, as it's not modified).
-     * @return An integer representing the evaluation score. Positive for white advantage,
-     * negative for black advantage.
-     *
-     * Example:
-     * - A board where White is up a Queen might return +900.
-     * - A board where Black is up a Rook might return -500.
+     * @param board The chess board position to evaluate (const reference, as its state is not modified).
+     * @return An integer representing the evaluation score, always from White's perspective.
+     * Scores are typically given in centipawns (1/100th of a pawn), so a pawn is 100.
      */
     int evaluate(const ChessBoard& board) const;
+
+    /**
+     * @brief Implements the recursive Minimax search algorithm.
+     *
+     * Minimax is a decision-making algorithm used to choose the optimal move for a player,
+     * assuming the opponent also plays optimally. It works by building a game tree
+     * and evaluating positions at a certain depth.
+     *
+     * The function always returns a score from the perspective of the *current active player*
+     * at the node being evaluated. For example, if it's White's turn at `current_board`,
+     * `minimax` returns a score White wants to maximize. If it's Black's turn, it returns
+     * a score Black wants to maximize (which is negative from White's absolute perspective).
+     *
+     * @param board The current state of the chessboard (non-const reference).
+     * @param depth The remaining depth to search. When depth reaches 0, the `evaluate`
+     * function is called to get a static score.
+     * @return The best score found for the `board.active_player` at the current node,
+     * assuming optimal play from both sides down to the specified depth.
+     */
+    int minimax(ChessBoard& board, int depth);
 };
 
 #endif // CHESS_AI_H

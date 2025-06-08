@@ -1,11 +1,12 @@
-#include "ChessAI.h"      // Include the header for ChessAI itself
-#include "MoveGenerator.h" // Needed to generate legal moves
-#include "Constants.h"    // To access AI_SEARCH_DEPTH, DEFAULT_AI_TYPE, etc.
+#include "ChessAI.h"          // Include the header for ChessAI itself
+#include "MoveGenerator.h"    // Needed to generate legal moves
+#include "Constants.h"        // To access AI_SEARCH_DEPTH, DEFAULT_AI_TYPE, etc.
 #include "ChessBitboardUtils.h" // For bitboard manipulation functions and move_to_string
-#include <random>         // For std::random_device, std::mt19937_64, std::uniform_int_distribution
-#include <iostream>       // For std::cerr to output error or debug messages
-#include <vector>         // Required for std::vector to manage collections of moves
-#include <algorithm>      // Required for std::min, std::max (for evaluation/search)
+
+#include <random>             // For std::random_device, std::mt19937_64, std::uniform_int_distribution
+#include <iostream>           // For std::cerr to output error or debug messages
+#include <vector>             // Required for std::vector to manage collections of moves
+#include <algorithm>          // Required for std::min, std::max (for evaluation/search)
 
 // Constructor for ChessAI.
 // Initializes the random number generator used by the AI.
@@ -21,16 +22,17 @@ ChessAI::ChessAI() : rng_engine(std::random_device{}()) {
 
 /**
  * @brief Evaluates the given chess board position and returns a numerical score.
- * A higher score indicates a better position for the active player.
  *
- * This is a placeholder evaluation function and currently only considers material.
- * Material values are commonly used in chess engines as a basic evaluation component.
- * Future enhancements will include positional factors (e.g., pawn structure, king safety,
- * piece activity, mobility), which add more chess-specific intelligence.
+ * This evaluation function now consistently returns a score from **White's perspective**.
+ * A positive score indicates an advantage for White, and a negative score indicates
+ * an advantage for Black.
+ *
+ * It currently only considers material. Future enhancements will include
+ * positional factors (e.g., pawn structure, king safety, piece activity, mobility),
+ * which add more chess-specific intelligence.
  *
  * @param board The chess board position to evaluate (const reference, as its state is not modified).
- * @return An integer representing the evaluation score. A positive score indicates
- * an advantage for White, and a negative score indicates an advantage for Black.
+ * @return An integer representing the evaluation score, always from White's perspective.
  * Scores are typically given in centipawns (1/100th of a pawn), so a pawn is 100.
  *
  * Example Material Values (in centipawns):
@@ -39,32 +41,27 @@ ChessAI::ChessAI() : rng_engine(std::random_device{}()) {
  * Bishop: 330
  * Rook:   500
  * Queen:  900
- * King:   (Infinite/very high, as it's not a tradable piece but its safety is paramount)
  */
 int ChessAI::evaluate(const ChessBoard& board) const {
     int score = 0; // Initialize score to zero.
 
     // Define standard piece values in centipawns.
-    // These are often chosen based on common chess wisdom and engine tuning.
     const int PAWN_VALUE   = 100;
     const int KNIGHT_VALUE = 320;
     const int BISHOP_VALUE = 330;
     const int ROOK_VALUE   = 500;
     const int QUEEN_VALUE  = 900;
-    // King value is usually implicitly handled by checkmate scores or king safety tables.
-    // We don't add a king's material value directly to prevent "trading" kings.
 
     // Iterate through all 64 squares of the board to sum up material.
     for (int i = 0; i < 64; ++i) {
-        // Check for white pieces.
+        // Add value for white pieces.
         if (ChessBitboardUtils::test_bit(board.white_pawns, i))    score += PAWN_VALUE;
         else if (ChessBitboardUtils::test_bit(board.white_knights, i)) score += KNIGHT_VALUE;
         else if (ChessBitboardUtils::test_bit(board.white_bishops, i)) score += BISHOP_VALUE;
         else if (ChessBitboardUtils::test_bit(board.white_rooks, i))  score += ROOK_VALUE;
         else if (ChessBitboardUtils::test_bit(board.white_queens, i)) score += QUEEN_VALUE;
-        // No score for king directly, as its value is positional (safety, mobility) and infinite.
 
-        // Check for black pieces.
+        // Subtract value for black pieces.
         else if (ChessBitboardUtils::test_bit(board.black_pawns, i))   score -= PAWN_VALUE;
         else if (ChessBitboardUtils::test_bit(board.black_knights, i)) score -= KNIGHT_VALUE;
         else if (ChessBitboardUtils::test_bit(board.black_bishops, i)) score -= BISHOP_VALUE;
@@ -72,16 +69,124 @@ int ChessAI::evaluate(const ChessBoard& board) const {
         else if (ChessBitboardUtils::test_bit(board.black_queens, i)) score -= QUEEN_VALUE;
     }
 
-    // Adjust score based on the active player.
-    // If it's Black's turn, we want to return a score that is from Black's perspective,
-    // so we negate the score. This makes the search simpler: the AI always tries to maximize
-    // the score it receives, regardless of whose turn it is.
-    // Example: If White has a +200 centipawn advantage and it's White's turn, score is +200.
-    // If White has a +200 centipawn advantage and it's Black's turn, the score for Black is -200.
-    if (board.active_player == PlayerColor::Black) {
-        return -score;
-    }
+    // The score is now always from White's perspective.
+    // Example: If White is up a pawn, score is +100. If Black is up a pawn, score is -100.
     return score;
+}
+
+/**
+ * @brief Implements the recursive Minimax search algorithm (in Negamax form).
+ *
+ * Minimax is a decision-making algorithm used to choose the optimal move for a player,
+ * assuming the opponent also plays optimally. It works by building a game tree
+ * and evaluating positions at a certain depth.
+ *
+ * This function is implemented in a **Negamax** style. This means that at *every*
+ * node, the function attempts to **maximize** the score for the `board.active_player`
+ * at that specific node. The negation of the recursive call handles the alternating
+ * turns correctly.
+ *
+ * @param board The current state of the chessboard (non-const reference).
+ * @param depth The remaining depth to search. When depth reaches 0, the `evaluate`
+ * function is called to get a static score.
+ * @return The best score found for the `board.active_player` at the current node.
+ * This score is from the perspective of the player whose turn it is at this `board` state.
+ *
+ * Example Scenario: White to move, `minimax(initial_board, 2)` is called (root node)
+ * (Assume `AI_SEARCH_DEPTH = 2`)
+ *
+ * 1. `minimax(board_W, 2)` (White's turn, `best_eval = -inf`)
+ * - `legal_moves` for White: {e2e4, d2d4}
+ *
+ * a. Consider `e2e4`:
+ * - `board_W.apply_move(e2e4, info)` -> board state becomes `board_B1` (Black's turn).
+ * - `eval = -minimax(board_B1, 1)` (Black's turn, trying to maximize *its own* score (which is negative from White's perspective))
+ * - `minimax(board_B1, 1)`: (Black's turn, `best_eval = -inf`)
+ * - `legal_moves` for Black: {e7e5, c7c5}
+ * - Consider `e7e5`:
+ * - `board_B1.apply_move(e7e5, info)` -> board state `board_W1` (White's turn).
+ * - `eval2 = -minimax(board_W1, 0)` (White's turn, trying to maximize *its own* score)
+ * - `minimax(board_W1, 0)`: Base case. `board_W1.active_player` is White.
+ * `returns evaluate(board_W1)` (e.g., +50 from White's perspective).
+ * - `eval2` becomes `-50` (negated because it was for Black's perspective when evaluating its child).
+ * - `best_eval` for `minimax(board_B1, 1)` (Black) is updated with `std::max(-inf, -50)` -> `-50`.
+ * - `board_B1.undo_move(e7e5, info)`.
+ * - Consider `c7c5` (similar, assume `minimax(board_W2, 0)` returns `+100` for White (meaning `-100` for Black)
+ * - `eval2` becomes `-100`.
+ * - `best_eval` for `minimax(board_B1, 1)` (Black) is updated with `std::max(-50, -100)` -> `-50`.
+ * - Returns `-50` (best for Black at this node).
+ * - `eval` becomes `+50` (negation of `-50`, converts Black's perspective score back to White's perspective).
+ * - `best_eval` for `minimax(board_W, 2)` (White) is updated with `std::max(-inf, +50)` -> `+50`.
+ * - `board_W.undo_move(e2e4, info)`.
+ *
+ * b. Consider `d2d4`: (similar steps, assume `minimax(board_B2, 1)` returns `-30` (best for Black))
+ * - `eval` becomes `+30`.
+ * - `best_eval` for `minimax(board_W, 2)` (White) is updated with `std::max(+50, +30)` -> `+50`.
+ * - `board_W.undo_move(d2d4, info)`.
+ *
+ * 2. Returns `+50` (White's final best score at depth 2).
+ */
+int ChessAI::minimax(ChessBoard& board, int depth) {
+    // --- Base Case: Terminal Node or Max Depth Reached ---
+    // When the search depth is 0, we've reached the end of our search horizon.
+    // In this case, we statically evaluate the current board position.
+    if (depth == 0) {
+        int static_eval = evaluate(board); // Get score from White's perspective.
+        // Return score from the perspective of the *current active player* at this leaf node.
+        // If it's White's turn, return White's score. If it's Black's turn, return Black's score (-White's score).
+        if (board.active_player == PlayerColor::White) {
+            return static_eval; // White wants to maximize its own (White's) score.
+        } else {
+            return -static_eval; // Black wants to maximize its own (Black's) score, which is -White's score.
+        }
+    }
+
+    MoveGenerator move_gen;
+    std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
+
+    // If there are no legal moves from the current position, it's a terminal node.
+    // This could be checkmate or stalemate.
+    // In such cases, we evaluate the current board state directly.
+    if (legal_moves.empty()) {
+        // Special case for checkmate/stalemate should eventually be handled here,
+        // assigning very large positive/negative values for checkmate.
+        // For now, we use material evaluation as if it's a static position.
+        int static_eval = evaluate(board); // Score from White's perspective.
+        if (board.active_player == PlayerColor::White) {
+            return static_eval;
+        } else {
+            return -static_eval;
+        }
+    }
+
+    // Initialize `best_eval` to negative infinity for the current player.
+    // Every call to `minimax` (in Negamax) tries to maximize its own score.
+    int best_eval = -99999999; 
+
+    // Iterate through all legal moves from the current position.
+    for (const auto& move : legal_moves) {
+        StateInfo info_for_undo; // Store board state before applying the move.
+
+        // Apply the current move to the board.
+        // This advances the game state. Crucially, `board.active_player` flips to the opponent.
+        board.apply_move(move, info_for_undo);
+
+        // Recursively call `minimax` for the next level (depth - 1).
+        // The recursive call `minimax(board, depth - 1)` will now operate from the *opponent's* perspective
+        // (since the opponent is now the `board.active_player`).
+        // It will return the best score for the opponent from their perspective.
+        // To get this score back to *our* perspective for comparison, we negate it.
+        // This is the core of the Negamax principle: `score = -minimax(opponent_state, depth-1)`.
+        int eval = -minimax(board, depth - 1); 
+
+        // Update `best_eval` if the current move leads to a better score for the current player.
+        best_eval = std::max(best_eval, eval);
+
+        // Undo the move to restore the board to its original state.
+        // This is vital for correctly exploring all other branches from this node.
+        board.undo_move(move, info_for_undo);
+    }
+    return best_eval; // Return the maximum score found for the current player at this node.
 }
 
 /**
@@ -117,19 +222,14 @@ Move ChessAI::findBestMove(ChessBoard& board) {
         case AIType::RANDOM_MOVER: {
             // --- Single-threaded Random Mover Implementation ---
             // This is the simplest AI behavior: it just picks a random legal move.
-            // This implementation is now single-threaded, as multi-threading for a
-            // purely random choice introduces more overhead than benefit.
             
             // Create a uniform distribution to select a random index within the bounds of `legal_moves`.
-            // The range is from 0 up to (but including) `legal_moves.size() - 1`.
             std::uniform_int_distribution<size_t> dist(0, legal_moves.size() - 1);
             
             // Select a random move using the ChessAI's main random number engine (`rng_engine`).
-            // `rng_engine` is a member variable, initialized in the constructor.
             Move chosen_move = legal_moves[dist(rng_engine)]; 
             
-            // Output to standard error (cerr) for debugging purposes. This message will not
-            // interfere with the UCI communication on standard output (cout).
+            // Output to standard error (cerr) for debugging purposes.
             std::cerr << "ChessAI (Random): Chose move: " << ChessBitboardUtils::move_to_string(chosen_move) << std::endl;
             
             return chosen_move; // Return the randomly chosen move.
@@ -140,95 +240,145 @@ Move ChessAI::findBestMove(ChessBoard& board) {
             // the `evaluate` function, and choose the move that leads to the best score.
             // This is a greedy approach and forms the foundation for more advanced searches.
 
-            int best_score = -999999; // Initialize with a very small number (negative infinity)
-                                     // Assuming scores are centipawns, this value is effectively "minus infinity".
-            Move best_move = legal_moves[0]; // Initialize best_move with the first legal move as a fallback.
+            // Store the active player *before* considering any moves.
+            // This is crucial because `evaluate` now returns a score from White's perspective,
+            // and we need to know if we are maximizing (White) or minimizing (Black) that score.
+            PlayerColor original_active_player = board.active_player;
 
-            // Iterate through each legal move to find the one that yields the best board evaluation.
-            // `const auto& move`: Iterates by constant reference to avoid unnecessary copying of `Move` objects.
+            // Initialize `best_score` and a vector to hold moves that achieve this best score.
+            int best_score;
+            std::vector<Move> best_moves_candidates; // To store moves that are tied for the best score.
+
+            // Set initial `best_score` based on whether we are maximizing or minimizing.
+            // If it's White's turn, we want the highest score from White's perspective.
+            // If it's Black's turn, we want the lowest score from White's perspective.
+            if (original_active_player == PlayerColor::White) {
+                best_score = -999999; // Initialize to negative infinity for maximizing.
+            } else { // original_active_player == PlayerColor::Black
+                best_score = 999999;  // Initialize to positive infinity for minimizing.
+            }
+            
+            // Iterate through each legal move.
             for (const auto& move : legal_moves) {
                 StateInfo info_for_undo; // Object to store the board state *before* applying the move.
-                                         // This is essential for `undo_move` to restore the board correctly.
 
                 // Temporarily apply the current move to the board.
-                // This simulates making the move without actually committing to it.
+                // After this call, `board.active_player` will be the opponent's color.
                 board.apply_move(move, info_for_undo);
 
                 // Evaluate the new board position.
-                // The `evaluate` function will return a score from the perspective of the *current* active player.
-                // Since `apply_move` flips the active player, the score returned by `evaluate` will be
-                // from the perspective of the *opponent* if we strictly pass `board` as-is.
-                // To get the score from *our* perspective (the player who *just* moved), we can negate the result.
-                // Or, more correctly for Minimax, the `evaluate` function should return positive for White advantage
-                // and negative for Black advantage. Then, the calling side maximizes its score.
-                // Current `evaluate` returns from active player's perspective, so we need to negate it to get value for *us*.
-                int current_score = evaluate(board); // Evaluate the position after applying the move.
+                // `evaluate(board)` now *always* returns a score from White's perspective.
+                int current_score_from_white_perspective = evaluate(board); 
 
-                // In a Minimax context, the score returned by `evaluate` is for the side *whose turn it is*.
-                // Since we just made a move for `current_player`, the board's `active_player` is now the opponent.
-                // So, `evaluate(board)` gives the opponent's score. We want to maximize our score, so we negate.
-                // More precise: if `evaluate` returns score from White's perspective:
-                //   if (board.previous_active_player == PlayerColor::White) current_score = evaluate(board);
-                //   else current_score = -evaluate(board); // opponent's score
-                // Simpler: If `evaluate` returns score for the player whose turn it currently is (after the move):
-                //   int current_score = -evaluate(board); // Negate because it's opponent's turn.
-                // However, our `evaluate` already handles negating if it's Black's turn, so just use `evaluate(board)`.
-                // For a 1-ply search, the active player on the *new* board is the opponent.
-                // So the score we get from `evaluate` is what the *opponent* aims for.
-                // We want to minimize the opponent's best score.
-                // This will be clearer when implementing Minimax/Alpha-Beta.
-                // For now, let's just pick the move that yields the highest score for White, and lowest for Black.
-
-                // If the current move results in a better score than the `best_score` found so far,
-                // update `best_score` and `best_move`.
-                if (current_score > best_score) {
-                    best_score = current_score;
-                    best_move = move;
+                // Determine whether to maximize (for White) or minimize (for Black)
+                // the `current_score_from_white_perspective`.
+                if (original_active_player == PlayerColor::White) {
+                    // White wants to maximize its score (i.e., maximize the score from White's perspective).
+                    if (current_score_from_white_perspective > best_score) {
+                        best_score = current_score_from_white_perspective;
+                        best_moves_candidates.clear(); // Clear old candidates as we found a new best score.
+                        best_moves_candidates.push_back(move);
+                    } else if (current_score_from_white_perspective == best_score) {
+                        // If it's a tie for the best score, add this move to the candidates.
+                        best_moves_candidates.push_back(move);
+                    }
+                } else { // original_active_player == PlayerColor::Black
+                    // Black wants to minimize White's score (which means maximizing its own score).
+                    if (current_score_from_white_perspective < best_score) {
+                        best_score = current_score_from_white_perspective;
+                        best_moves_candidates.clear(); // Clear old candidates as we found a new best score.
+                        best_moves_candidates.push_back(move);
+                    } else if (current_score_from_white_perspective == best_score) {
+                        // If it's a tie for the best score, add this move to the candidates.
+                        best_moves_candidates.push_back(move);
+                    }
                 }
 
                 // Crucial: Undo the move to restore the board to its original state for the next iteration.
-                // This allows the AI to explore all moves from the *same* starting position without side effects.
                 board.undo_move(move, info_for_undo);
             }
-            // Output for debugging.
-            std::cerr << "ChessAI (Simple Evaluation): Chose move: " << ChessBitboardUtils::move_to_string(best_move) 
-                      << " with score: " << best_score << std::endl;
-            return best_move; // Return the move that leads to the best evaluated position.
-        }
-        case AIType::MINIMAX:
-        case AIType::ALPHA_BETA:
-            // TODO: Implement the Minimax or Alpha-Beta search algorithm here.
-            // This involves recursively exploring the game tree to a certain depth (e.g., AI_SEARCH_DEPTH).
-            // - `Minimax`: Explores all possible moves to a given depth, assuming optimal play from both sides.
-            // - `Alpha-Beta`: An optimization of Minimax that prunes branches that cannot possibly
-            //   influence the final decision, significantly improving performance.
-            // These algorithms would heavily use `board.apply_move()` and `board.undo_move()`
-            // to navigate the game tree, and `evaluate()` to score leaf nodes.
-            // Example:
-            //   int best_score_from_search = alphaBeta(board, AI_SEARCH_DEPTH, -INFINITE, INFINITE, board.active_player);
-            //   // Logic to find the actual move that led to best_score_from_search.
-            std::cerr << "ChessAI: MINIMAX/ALPHA_BETA not yet implemented. Falling back to simple evaluation." << std::endl;
-            // Fallback: For now, if these modes are selected, it will perform the simple evaluation logic
-            // as we did in the SIMPLE_EVALUATION case. This ensures a functional fallback.
-            {
-                int best_score = -999999;
-                Move best_move = legal_moves[0];
 
-                for (const auto& move : legal_moves) {
-                    StateInfo info_for_undo;
-                    board.apply_move(move, info_for_undo);
-                    int current_score = evaluate(board);
-                    if (current_score > best_score) {
-                        best_score = current_score;
-                        best_move = move;
-                    }
-                    board.undo_move(move, info_for_undo);
-                }
-                std::cerr << "ChessAI (Fallback from MINIMAX/ALPHA_BETA): Chose move: " 
-                          << ChessBitboardUtils::move_to_string(best_move) << " with score: " 
-                          << best_score << std::endl;
-                return best_move;
+            // Initialize final_chosen_move with a valid default (invalid) move.
+            Move final_chosen_move = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
+            
+            if (!best_moves_candidates.empty()) {
+                // If multiple moves are tied for the best score, randomly pick one among them.
+                // This breaks deterministic play when material scores are equal.
+                std::uniform_int_distribution<size_t> dist(0, best_moves_candidates.size() - 1);
+                final_chosen_move = best_moves_candidates[dist(rng_engine)];
+            } else {
+                // This case should theoretically not be reached if `legal_moves` was not empty.
+                // It means no valid best move candidate was found. The default-initialized
+                // `final_chosen_move` will be returned.
+                std::cerr << "ChessAI (Simple Evaluation): No best candidates found, returning default invalid move (fallback)." << std::endl;
             }
+
+            // Output for debugging.
+            std::cerr << "ChessAI (Simple Evaluation): Chose move: " << ChessBitboardUtils::move_to_string(final_chosen_move) 
+                      << " with score (White's perspective): " << best_score << std::endl;
+            return final_chosen_move; // Return the chosen move.
+        }
+        case AIType::MINIMAX: {
+            // --- Minimax Search Implementation ---
+            // This AI will now perform a recursive Minimax search to a specified depth (`AI_SEARCH_DEPTH`).
+            // It aims to find the best move for the `original_active_player` by assuming both
+            // players play optimally.
+
+            // Store the active player *before* initiating the search.
+            // This player is the "root" player for whom we are finding the best move.
+            PlayerColor original_active_player = board.active_player;
+
+            int best_score; // This will store the best score found at the root for `original_active_player`.
+            std::vector<Move> best_moves_candidates; // To store moves that tie for the optimal score.
+
+            // Initialize `best_score` to negative infinity for the root player (maximizing their own score).
+            best_score = -99999999; 
+            
+            // Iterate through each of the legal moves from the current position (the root node).
+            for (const auto& move : legal_moves) {
+                StateInfo info_for_undo; // Store board state before applying the move.
+
+                // Apply the move to the board. `board.active_player` flips to the opponent.
+                board.apply_move(move, info_for_undo);
+
+                // Recursively call the `minimax` function for the next level of the search.
+                // `AI_SEARCH_DEPTH - 1` because one ply has already been consumed by applying `move`.
+                // The `minimax` function will return a score from the perspective of the `board.active_player`
+                // (which is now the opponent).
+                // Therefore, we negate the result to get the score from *our* `original_active_player`'s perspective.
+                int current_eval = -minimax(board, AI_SEARCH_DEPTH - 1); 
+
+                // Compare `current_eval` (which is now from `original_active_player`'s perspective)
+                // with `best_score` to find the optimal move at the root.
+                // At the root, we always maximize the score for the `original_active_player`.
+                if (current_eval > best_score) {
+                    best_score = current_eval;
+                    best_moves_candidates.clear(); // Clear old candidates, new best found.
+                    best_moves_candidates.push_back(move);
+                } else if (current_eval == best_score) {
+                    // If scores are tied, add to candidates for random tie-breaking.
+                    best_moves_candidates.push_back(move);
+                }
+
+                // Undo the move to restore the board for the next iteration of the root moves.
+                board.undo_move(move, info_for_undo);
+            }
+
+            Move final_chosen_move = Move({0,0}, {0,0}, PieceTypeIndex::NONE); // Initialize with invalid move.
+            if (!best_moves_candidates.empty()) {
+                // If multiple moves are tied for the best score at the root, randomly pick one.
+                // This adds variety to the engine's play when multiple moves are equally good.
+                std::uniform_int_distribution<size_t> dist(0, best_moves_candidates.size() - 1);
+                final_chosen_move = best_moves_candidates[dist(rng_engine)];
+            } else {
+                // Fallback: This case should not be reached if legal_moves was not empty.
+                std::cerr << "ChessAI (Minimax): No best candidates found, returning default invalid move (fallback)." << std::endl;
+            }
+
+            std::cerr << "ChessAI (Minimax): Chose move: " << ChessBitboardUtils::move_to_string(final_chosen_move) 
+                      << " with score (current player's perspective at root): " << best_score << std::endl;
+            return final_chosen_move;
+        }
         default:
             // Handle any unconfigured or unknown AI types as a fallback.
             std::cerr << "ChessAI: Unknown AIType configured. Falling back to random." << std::endl;

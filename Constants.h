@@ -25,7 +25,7 @@ enum class AIType {
 
 // Define the default AI type to use when the engine starts.
 // This can later be overridden by UCI options from a chess GUI.
-const AIType DEFAULT_AI_TYPE = AIType::SIMPLE_EVALUATION;
+const AIType DEFAULT_AI_TYPE = AIType::MINIMAX;
 
 
 #endif // CONSTANTS_H
