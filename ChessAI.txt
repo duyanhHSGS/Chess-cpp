@@ -7,7 +7,7 @@
 #include <iostream>           // For std::cerr to output error or debug messages
 #include <vector>             // Required for std::vector to manage collections of moves
 #include <algorithm>          // Required for std::min, std::max (for evaluation/search)
-#include <chrono>             // For std::chrono to measure search time
+#include <chrono>             // REQUIRED: For std::chrono to measure search time
 
 // Constructor for ChessAI.
 // Initializes the random number generator used by the AI.
@@ -15,11 +15,16 @@
 // using `std::random_device` to ensure a non-deterministic seed for true randomness.
 ChessAI::ChessAI() : rng_engine(std::random_device{}()) {
     // Initialize search statistics counters to zero.
-    // These are `std::atomic` variables, so direct assignment is fine.
     // They will be reset per search by `findBestMove`.
     nodes_evaluated_count = 0;
     branches_explored_count = 0;
     current_search_depth_set = 0;
+
+    // In a real, more advanced chess engine, this constructor would also be responsible for:
+    // - Initializing transposition tables (for caching search results and detecting repetitions).
+    // - Loading opening books (to play predefined moves in the opening phase).
+    // - Setting up any other persistent data structures required by the chosen search algorithm.
+    // - Potentially configuring AI parameters (e.g., specific evaluation weights).
 }
 
 /**
@@ -92,7 +97,7 @@ int ChessAI::evaluate(const ChessBoard& board) const {
  *
  */
 int ChessAI::minimax(ChessBoard& board, int depth) {
-    // Count this node as evaluated. `nodes_evaluated_count` is atomic for thread-safety.
+    // Count this node as evaluated.
     nodes_evaluated_count++;
 
     // --- Base Case: Terminal Node or Max Depth Reached ---
@@ -113,7 +118,6 @@ int ChessAI::minimax(ChessBoard& board, int depth) {
     std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
 
     // Add the number of legal moves generated at this node to the total branches explored.
-    // `branches_explored_count` is atomic for thread-safety.
     branches_explored_count += legal_moves.size();
 
     // If there are no legal moves from the current position, it's a terminal node.
@@ -175,11 +179,6 @@ int ChessAI::minimax(ChessBoard& board, int depth) {
  * invalid `Move` (where `piece_moved_type_idx` is `PieceTypeIndex::NONE`).
  */
 Move ChessAI::findBestMove(ChessBoard& board) {
-    // Reset search statistics for this new top-level search.
-    nodes_evaluated_count = 0;
-    branches_explored_count = 0;
-    current_search_depth_set = AI_SEARCH_DEPTH; // Store the initial depth for reporting.
-
     MoveGenerator move_gen; // Create an instance of the MoveGenerator to generate legal moves.
 
     // Generate all legal moves for the current board state.
@@ -296,12 +295,12 @@ Move ChessAI::findBestMove(ChessBoard& board) {
             return final_chosen_move; // Return the chosen move.
         }
         case AIType::MINIMAX: {
-            // --- Minimax Search Implementation (Multi-threaded Root) ---
-            // This section implements the Minimax search, with root moves parallelized
-            // using `std::async` to potentially utilize multiple CPU cores.
+            // --- Minimax Search Implementation ---
+            // This AI will now perform a recursive Minimax search to a specified depth (`AI_SEARCH_DEPTH`).
+            // It aims to find the best move for the `original_active_player` by assuming both
+            // players play optimally.
 
             // Reset search statistics for this new top-level search.
-            // These are atomic variables and are thread-safe for concurrent updates from minimax calls.
             nodes_evaluated_count = 0;
             branches_explored_count = 0;
             current_search_depth_set = AI_SEARCH_DEPTH; // Store the initial depth for reporting.
@@ -310,184 +309,80 @@ Move ChessAI::findBestMove(ChessBoard& board) {
             // This player is the "root" player for whom we are finding the best move.
             PlayerColor original_active_player = board.active_player;
 
-            Move final_chosen_move = Move({0,0}, {0,0}, PieceTypeIndex::NONE); // Initialize with an invalid move.
-            int best_eval = -99999999; // Initialize to negative infinity for the root maximizing player.
+            int best_score; // This will store the best score found at the root for `original_active_player`.
+            std::vector<Move> best_moves_candidates; // To store moves that tie for the optimal score.
+
+            // Initialize `best_score` to negative infinity for the root player (maximizing their own score).
+            best_score = -99999999; 
             
             // Record the start time of the search for performance metrics.
             auto start_time = std::chrono::high_resolution_clock::now();
 
-            if (NUMBER_OF_CORES_USED == 1) {
-                // --- Single-threaded Minimax execution ---
-                // This path ensures strictly sequential execution when NUMBER_OF_CORES_USED is 1.
-                
-                size_t best_move_index = 0; // Index of the best move in `legal_moves`.
+            // Iterate through each of the legal moves from the current position (the root node).
+            for (const auto& move : legal_moves) {
+                StateInfo info_for_undo; // Store board state before applying the move.
 
-                // Iterate through each of the legal moves from the current position (the root node).
-                for (size_t i = 0; i < legal_moves.size(); ++i) {
-                    StateInfo info_for_undo; // Store board state before applying the move.
+                // Apply the move to the board. `board.active_player` flips to the opponent.
+                board.apply_move(move, info_for_undo);
 
-                    // Apply the move to the board. `board.active_player` flips to the opponent.
-                    board.apply_move(legal_moves[i], info_for_undo);
+                // Recursively call the `minimax` function for the next level of the search.
+                // `AI_SEARCH_DEPTH - 1` because one ply has already been consumed by applying `move`.
+                // The `minimax` function will return a score from the perspective of the `board.active_player`
+                // (which is now the opponent).
+                // Therefore, we negate the result to get the score from *our* `original_active_player`'s perspective.
+                int current_eval = -minimax(board, AI_SEARCH_DEPTH - 1); 
 
-                    // Recursively call the `minimax` function for the next level of the search.
-                    // `AI_SEARCH_DEPTH - 1` because one ply has already been consumed by applying `move`.
-                    // The `minimax` function will return a score from the perspective of the `board.active_player`
-                    // (which is now the opponent).
-                    // Therefore, we negate the result to get the score from *our* `original_active_player`'s perspective.
-                    int current_eval = -minimax(board, AI_SEARCH_DEPTH - 1); 
-
-                    // Compare `current_eval` (which is now from `original_active_player`'s perspective)
-                    // with `best_eval` to find the optimal move at the root.
-                    // At the root, we always maximize the score for the `original_active_player`.
-                    if (current_eval > best_eval) {
-                        best_eval = current_eval;
-                        best_move_index = i;
-                    }
-                    // For single-threaded, we don't need a `best_moves_candidates` vector if we just pick the first best.
-                    // If tie-breaking is desired, a simple random choice can be added if multiple moves yield `best_eval`.
-
-                    // Undo the move to restore the board for the next iteration of the root moves.
-                    board.undo_move(legal_moves[i], info_for_undo);
-                }
-                final_chosen_move = legal_moves[best_move_index];
-
-            } else {
-                // --- Multi-threaded Minimax execution (NUMBER_OF_CORES_USED > 1) ---
-                size_t best_move_index = 0; // Index of the best move in `legal_moves`.
-                std::vector<std::pair<int, size_t>> results_from_threads; // Store results from futures
-
-                // Decide between "one task per move" or "partitioned tasks"
-                if (legal_moves.size() <= NUMBER_OF_CORES_USED) { 
-                    // Launch one async task per move. This is suitable when the number of moves
-                    // is small or roughly equal to the number of available cores.
-                    std::vector<std::future<std::pair<int, size_t>>> futures;
-                    for (size_t i = 0; i < legal_moves.size(); ++i) {
-                        // Launch an asynchronous task for each legal root move.
-                        // The lambda captures `this` (to call `minimax`), `i` (move index), and `board` by value.
-                        // Capturing `board` by value ensures each thread gets its own copy of the board state
-                        // to work on, preventing race conditions on the main board object.
-                        futures.push_back(std::async(std::launch::async, 
-                                                    [this, i, board, legal_moves]() -> std::pair<int, size_t> {
-                            ChessBoard board_copy = board; // Create a deep copy of the board for this thread.
-                            StateInfo info;
-                            board_copy.apply_move(legal_moves[i], info); // Apply the root move on the copy.
-                            
-                            // Evaluate the move by calling minimax recursively.
-                            // We negate the result as minimax returns score for the current player of that node
-                            // (which is the opponent's perspective after applying the root move).
-                            int eval = -minimax(board_copy, AI_SEARCH_DEPTH - 1);
-                            return std::make_pair(eval, i); // Return evaluation and original move index.
-                        }));
-                    }
-                    // Gather results from all launched futures.
-                    // `f.get()` blocks until the corresponding task completes.
-                    for (auto &f : futures) {
-                        results_from_threads.push_back(f.get());
-                    }
-                } else {
-                    // Partition moves into `NUMBER_OF_CORES_USED` groups.
-                    // This is used when the number of legal moves is significantly larger
-                    // than the number of available cores, to avoid excessive thread creation.
-                    unsigned int num_threads_to_use = NUMBER_OF_CORES_USED;
-                    size_t moves_per_thread = legal_moves.size() / num_threads_to_use;
-                    size_t current_move_idx = 0;
-                    std::vector<std::future<std::pair<int, size_t>>> futures;
-
-                    for (unsigned int i = 0; i < num_threads_to_use; ++i) {
-                        size_t start_idx = current_move_idx;
-                        // Determine the end index for this thread's subset of moves.
-                        // The last thread gets any remaining moves to ensure all are covered.
-                        size_t end_idx = (i == num_threads_to_use - 1) ? legal_moves.size() : (start_idx + moves_per_thread);
-
-                        // Launch an asynchronous task.
-                        // The lambda captures `this`, `start_idx`, `end_idx`, and `board` by value.
-                        futures.push_back(std::async(std::launch::async,
-                            [this, start_idx, end_idx, board, legal_moves]() -> std::pair<int, size_t> {
-                                // Each thread maintains its own local best_eval and best_index for its assigned subset.
-                                int local_best_eval = -99999999;
-                                size_t local_best_index = start_idx; // Default to the first move in its subset.
-
-                                // Iterate only over the subset of moves assigned to this thread.
-                                for (size_t j = start_idx; j < end_idx; ++j) {
-                                    // Create a deep copy of the board for this move.
-                                    ChessBoard board_copy = board;
-                                    StateInfo info;
-                                    board_copy.apply_move(legal_moves[j], info); // Apply the root move on the copy.
-                                    
-                                    // Evaluate the move with recursive depth search.
-                                    // Negate the minimax result to align perspective.
-                                    int eval = -minimax(board_copy, AI_SEARCH_DEPTH - 1);
-                                    
-                                    if (eval > local_best_eval) {
-                                        local_best_eval = eval;
-                                        local_best_index = j;
-                                    }
-                                }
-                                return std::make_pair(local_best_eval, local_best_index); // Return best from this subset.
-                            }
-                        ));
-                        current_move_idx = end_idx; // Update index for the next thread's starting point.
-                    }
-                    // Combine results from the different threads.
-                    for (auto &f : futures) {
-                        results_from_threads.push_back(f.get());
-                    }
-                }
-                
-                // After all threads/tasks complete, determine the overall best move from results_from_threads
-                // This part needs to process `results_from_threads`
-                // And pick one move, possibly with random tie-breaking.
-                
-                std::vector<Move> best_moves_candidates; // To handle ties for the optimal score at the root.
-                
-                // Find the overall best move from the results collected from all threads.
-                for (const auto& result : results_from_threads) {
-                    if (result.first > best_eval) {
-                        best_eval = result.first;
-                        best_moves_candidates.clear(); // New best found, clear previous candidates
-                        best_moves_candidates.push_back(legal_moves[result.second]);
-                    } else if (result.first == best_eval) {
-                        best_moves_candidates.push_back(legal_moves[result.second]); // Add tied move
-                    }
+                // Compare `current_eval` (which is now from `original_active_player`'s perspective)
+                // with `best_score` to find the optimal move at the root.
+                // At the root, we always maximize the score for the `original_active_player`.
+                if (current_eval > best_score) {
+                    best_score = current_eval;
+                    best_moves_candidates.clear(); // Clear old candidates, new best found.
+                    best_moves_candidates.push_back(move);
+                } else if (current_eval == best_score) {
+                    // If scores are tied, add to candidates for random tie-breaking.
+                    best_moves_candidates.push_back(move);
                 }
 
-                if (!best_moves_candidates.empty()) {
-                    // If multiple moves are tied for the best score at the root, randomly pick one.
-                    std::uniform_int_distribution<size_t> dist(0, best_moves_candidates.size() - 1);
-                    final_chosen_move = best_moves_candidates[dist(rng_engine)];
-                } else {
-                    // Fallback: This case should not be reached if legal_moves was not empty.
-                    std::cerr << "DEBUG: ChessAI (Minimax Multithreaded): No best candidates found, returning default invalid move (fallback)." << std::endl;
-                }
+                // Undo the move to restore the board for the next iteration of the root moves.
+                board.undo_move(move, info_for_undo);
             }
-
-            // Record the end time and compute search duration.
+            // Record the end time of the search.
             auto end_time = std::chrono::high_resolution_clock::now();
+            // Calculate the duration of the search in microseconds.
             auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
-            long long duration_ms = duration_microseconds.count() / 1000;
-
+            long long duration_ms = duration_microseconds.count() / 1000; // Convert to milliseconds
+            
             // Calculate Nodes Per Second (NPS).
             long long nodes_per_second = 0;
             if (duration_ms > 0) { // Avoid division by zero
                 nodes_per_second = (nodes_evaluated_count * 1000) / duration_ms;
             } else if (nodes_evaluated_count > 0) {
                 // If duration is 0ms but nodes were evaluated, imply very high NPS.
-                // This might happen for very shallow searches or extremely fast systems.
-                nodes_per_second = nodes_evaluated_count * 1000000; 
+                nodes_per_second = nodes_evaluated_count * 1000000; // Represents nodes/sec for <1ms searches
             }
 
-            // Report search statistics.
-            std::cerr << "DEBUG: ChessAI (Minimax " << (NUMBER_OF_CORES_USED == 1 ? "Single-threaded" : "Multithreaded") << "): Completed search to depth " << current_search_depth_set
+
+            Move final_chosen_move = Move({0,0}, {0,0}, PieceTypeIndex::NONE); // Initialize with invalid move.
+            if (!best_moves_candidates.empty()) {
+                // If multiple moves are tied for the best score at the root, randomly pick one.
+                // This adds variety to the engine's play when multiple moves are equally good.
+                std::uniform_int_distribution<size_t> dist(0, best_moves_candidates.size() - 1);
+                final_chosen_move = best_moves_candidates[dist(rng_engine)];
+            } else {
+                // Fallback: This case should not be reached if legal_moves was not empty.
+                std::cerr << "DEBUG: ChessAI (Minimax): No best candidates found, returning default invalid move (fallback)." << std::endl;
+            }
+
+            // Output search statistics to stderr after the search is complete.
+            std::cerr << "DEBUG: ChessAI (Minimax): Completed search to depth " << current_search_depth_set
                       << ". Nodes: " << nodes_evaluated_count
-                      << ", Branches: " << branches_explored_count
+                      << ", Branches: " << branches_explored_count 
                       << ", Time: " << duration_ms << "ms"
                       << ", NPS: " << nodes_per_second << std::endl;
-            
-            // Output the chosen move and its score.
-            std::cerr << "DEBUG: ChessAI (Minimax " << (NUMBER_OF_CORES_USED == 1 ? "Single-threaded" : "Multithreaded") << "): Chose move: "
-                      << ChessBitboardUtils::move_to_string(final_chosen_move)
-                      << " with score (current player's perspective at root): " << best_eval << std::endl;
-            
+
+            std::cerr << "DEBUG: ChessAI (Minimax): Chose move: " << ChessBitboardUtils::move_to_string(final_chosen_move) 
+                      << " with score (current player's perspective at root): " << best_score << std::endl;
             return final_chosen_move;
         }
         default:

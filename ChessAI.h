@@ -4,6 +4,8 @@
 // Include necessary standard library headers
 #include <vector> // For std::vector to work with moves
 #include <random> // REQUIRED: For std::mt19937_64, std::random_device
+#include <future> // REQUIRED: For std::async and std::future for multi-threading
+#include <atomic> // REQUIRED: For std::atomic to ensure thread-safe counters
 
 // Include our custom chess engine component headers
 #include "ChessBoard.h" // To interact with the ChessBoard state
@@ -51,6 +53,14 @@ private:
     // A random number generator used by the AI (e.g., for random move selection or tie-breaking).
     std::mt19937_64 rng_engine; 
 
+    // --- Search Statistics ---
+    // These members will be used to track search progress and report it to the user.
+    // They are declared as `std::atomic` to ensure thread-safe increments
+    // when multiple search threads are updating them concurrently.
+    std::atomic<long long> nodes_evaluated_count;    // Total number of nodes (positions) evaluated during the search.
+    std::atomic<long long> branches_explored_count;  // Total number of moves generated/explored across all nodes.
+    int current_search_depth_set;                   // The maximum depth the search was configured to reach.
+
     /**
      * @brief Evaluates the given chess board position and returns a numerical score.
      *
@@ -65,22 +75,18 @@ private:
     int evaluate(const ChessBoard& board) const;
 
     /**
-     * @brief Implements the recursive Minimax search algorithm.
+     * @brief Implements the recursive Minimax search algorithm (in Negamax form).
      *
-     * Minimax is a decision-making algorithm used to choose the optimal move for a player,
-     * assuming the opponent also plays optimally. It works by building a game tree
-     * and evaluating positions at a certain depth.
-     *
-     * The function always returns a score from the perspective of the *current active player*
-     * at the node being evaluated. For example, if it's White's turn at `current_board`,
-     * `minimax` returns a score White wants to maximize. If it's Black's turn, it returns
-     * a score Black wants to maximize (which is negative from White's absolute perspective).
+     * This function is implemented in a **Negamax** style. This means that at *every*
+     * node, the function attempts to **maximize** the score for the `board.active_player`
+     * at that specific node. The negation of the recursive call handles the alternating
+     * turns correctly.
      *
      * @param board The current state of the chessboard (non-const reference).
      * @param depth The remaining depth to search. When depth reaches 0, the `evaluate`
      * function is called to get a static score.
-     * @return The best score found for the `board.active_player` at the current node,
-     * assuming optimal play from both sides down to the specified depth.
+     * @return The best score found for the `board.active_player` at the current node.
+     * This score is from the perspective of the player whose turn it is at this `board` state.
      */
     int minimax(ChessBoard& board, int depth);
 };

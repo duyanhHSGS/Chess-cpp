@@ -195,6 +195,82 @@ actual fen:  r1bqkbnr/p3pppp/np6/2Pp4/5P2/4P3/P1PPQ1PP/RNB1KBNR b KQkq - 0 5
 position startpos moves b2b4 b7b6 e2e3 d7d5 f2f4 b8a6 d1e2 c7c5 (no switch turn)
 
 
+// all game logic cleared
+
+minimax uses 1 core:
+position startpos
+go
+DEBUG: ChessAI (Minimax): Completed search to depth 5. Nodes: 3931011, Branches: 3930991, Time: 5669ms, NPS: 693422
+DEBUG: ChessAI (Minimax): Chose move: g1f3 with score (current player's perspective at root): 0
+bestmove g1f3
+go
+DEBUG: ChessAI (Minimax): Completed search to depth 5. Nodes: 3931011, Branches: 3930991, Time: 5632ms, NPS: 697977
+DEBUG: ChessAI (Minimax): Chose move: b1c3 with score (current player's perspective at root): 0
+bestmove b1c3
+go
+DEBUG: ChessAI (Minimax): Completed search to depth 5. Nodes: 3931011, Branches: 3930991, Time: 5664ms, NPS: 694034
+DEBUG: ChessAI (Minimax): Chose move: b1c3 with score (current player's perspective at root): 0
+bestmove b1c3
+
+700k nodes per second!
+
+
+uses 2 cores:
+position startpos
+go
+DEBUG: ChessAI (Minimax Multithreaded): Completed search to depth 5. Nodes: 3931011, Branches: 3930991, Time: 3375ms, NPS: 1164744
+DEBUG: ChessAI (Minimax Multithreaded): Chose move: b1a3 with score (current player's perspective at root): 0
+bestmove b1a3
+go
+DEBUG: ChessAI (Minimax Multithreaded): Completed search to depth 5. Nodes: 3931011, Branches: 3930991, Time: 3431ms, NPS: 1145733
+DEBUG: ChessAI (Minimax Multithreaded): Chose move: b1a3 with score (current player's perspective at root): 0
+bestmove b1a3
+
+around 11m NPS
+
+uses 3 cores
+position startpos
+go
+DEBUG: ChessAI (Minimax Multithreaded): Completed search to depth 5. Nodes: 3931011, Branches: 3930991, Time: 2761ms, NPS: 1423763
+DEBUG: ChessAI (Minimax Multithreaded): Chose move: b1a3 with score (current player's perspective at root): 0
+bestmove b1a3
+go
+DEBUG: ChessAI (Minimax Multithreaded): Completed search to depth 5. Nodes: 3931011, Branches: 3930991, Time: 2763ms, NPS: 1422732
+DEBUG: ChessAI (Minimax Multithreaded): Chose move: b1a3 with score (current player's perspective at root): 0
+bestmove b1a3
+
+around 14m nps
+
+uses 4 cores:
+position startpos
+go
+DEBUG: ChessAI (Minimax Multithreaded): Completed search to depth 5. Nodes: 3931011, Branches: 3930991, Time: 2304ms, NPS: 1706167
+DEBUG: ChessAI (Minimax Multithreaded): Chose move: b1a3 with score (current player's perspective at root): 0
+bestmove b1a3
+go
+DEBUG: ChessAI (Minimax Multithreaded): Completed search to depth 5. Nodes: 3931011, Branches: 3930991, Time: 2248ms, NPS: 1748670
+DEBUG: ChessAI (Minimax Multithreaded): Chose move: b1a3 with score (current player's perspective at root): 0
+bestmove b1a3
+
+around 17m nps
+
+uses 5 cores:
+position startpos
+go
+DEBUG: ChessAI (Minimax Multithreaded): Completed search to depth 5. Nodes: 3931011, Branches: 3930991, Time: 1979ms, NPS: 1986362
+DEBUG: ChessAI (Minimax Multithreaded): Chose move: b1a3 with score (current player's perspective at root): 0
+bestmove b1a3
+go
+DEBUG: ChessAI (Minimax Multithreaded): Completed search to depth 5. Nodes: 3931011, Branches: 3930991, Time: 1958ms, NPS: 2007666
+DEBUG: ChessAI (Minimax Multithreaded): Chose move: b1a3 with score (current player's perspective at root): 0
+bestmove b1a3
+go
+DEBUG: ChessAI (Minimax Multithreaded): Completed search to depth 5. Nodes: 3931011, Branches: 3930991, Time: 2053ms, NPS: 1914764
+DEBUG: ChessAI (Minimax Multithreaded): Chose move: b1a3 with score (current player's perspective at root): 0
+bestmove b1a3
+
+around 20m nps
+
 
 
 
