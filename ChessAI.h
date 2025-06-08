@@ -37,28 +37,36 @@ public:
      * on the given board.
      *
      * This is the main interface for the GameManager to request a move from the AI.
-     * The ChessAI operates on a const reference to the ChessBoard, ensuring it does
-     * not modify the actual game state directly. It performs its search by creating
-     * temporary board states (via make/unmake calls).
+     * The ChessAI operates on a non-const reference to the ChessBoard, as it will
+     * temporarily apply and undo moves during its search.
      *
-     * @param board The current state of the chessboard (non-const reference needed for apply/undo).
+     * @param board The current state of the chessboard (non-const reference).
      * @return The calculated best legal move. If no legal moves are found (e.g.,
-     * checkmate or stalemate), this method would typically return a default-constructed
-     * or special 'null' move. For now, it will pick a random legal move.
+     * checkmate or stalemate), this method returns a default-constructed
+     * or special 'null' move.
      */
     Move findBestMove(ChessBoard& board);
 
-    // --- Future Search and Evaluation Methods ---
-    // These would typically be private helpers that implement the actual AI logic.
-    // int minimax(ChessBoard& board, int depth);
-    // int alphaBeta(ChessBoard& board, int depth, int alpha, int beta, PlayerColor player_to_maximize);
-    // int evaluate(const ChessBoard& board) const;
-    // void orderMoves(std::vector<Move>& moves) const; // For move ordering during search
-
 private:
-    // A random number generator for simple move selection in the initial phase.
-    // Will be replaced by actual search logic.
+    // A random number generator used by the AI (e.g., for random move selection or tie-breaking).
     std::mt19937_64 rng_engine; 
+
+    /**
+     * @brief Evaluates the given chess board position and returns a numerical score.
+     * A higher score indicates a better position for the active player.
+     *
+     * This is a placeholder evaluation function and currently only considers material.
+     * Future enhancements will include positional factors, king safety, pawn structure, etc.
+     *
+     * @param board The chess board position to evaluate (const reference, as it's not modified).
+     * @return An integer representing the evaluation score. Positive for white advantage,
+     * negative for black advantage.
+     *
+     * Example:
+     * - A board where White is up a Queen might return +900.
+     * - A board where Black is up a Rook might return -500.
+     */
+    int evaluate(const ChessBoard& board) const;
 };
 
 #endif // CHESS_AI_H

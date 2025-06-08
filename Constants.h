@@ -9,7 +9,7 @@
 const uint64_t AI_SEARCH_DEPTH = 3;
 
 // Optional: Number of CPU cores/threads to use for parallel search (e.g., for root moves).
-const uint8_t NUMBER_OF_CORES_USED = 1;
+const uint8_t NUMBER_OF_CORES_USED = 4;
 
 // Define the different types of AI algorithms your engine can use.
 // This allows you to switch between AI strategies easily.
@@ -25,7 +25,7 @@ enum class AIType {
 
 // Define the default AI type to use when the engine starts.
 // This can later be overridden by UCI options from a chess GUI.
-const AIType DEFAULT_AI_TYPE = AIType::RANDOM_MOVER;
+const AIType DEFAULT_AI_TYPE = AIType::SIMPLE_EVALUATION;
 
 
 #endif // CONSTANTS_H
