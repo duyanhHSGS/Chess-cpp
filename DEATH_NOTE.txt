@@ -278,8 +278,105 @@ error:
 startpos moves e2e4 
 position startpos moves e2e4 d7d6 d2d4 d6d5 e4d5 d8d5 c2c4 d5c4 f1c4
 
+// wrong
 actual fen:rnb1kbnr/ppp1pppp/8/8/2BP4/8/PP3PPP/RNBQK1NR b KQkq - 0 5 
 output fen:rnb1kbnr/ppp1pppp/8/8/2qP4/8/PP3PPP/RNBQKBNR w KQkq - 0 5
-
+// correct
+position startpos moves e2e4 d7d6 d2d4 d6d5 e4d5 d8d5 c2c4 d5c4
 actual fen:rnb1kbnr/ppp1pppp/8/8/2qP4/8/PP3PPP/RNBQKBNR w KQkq - 0 5 
-output fen:
+output fen:rnb1kbnr/ppp1pppp/8/8/2qP4/8/PP3PPP/RNBQKBNR w KQkq - 0 5
+error
+
+
+position startpos moves e2e4 d7d6 d2d4 d6d5 e4d5 d8d5 c2c4 d5c4
+Fen after the position command: rnb1kbnr/ppp1pppp/8/8/2qP4/8/PP3PPP/RNBQKBNR w KQkq - 0 5
+Zobrist hash: 13505642498298033283
+
+position fen rnb1kbnr/ppp1pppp/8/8/2qP4/8/PP3PPP/RNBQKBNR w KQkq - 0 5
+Fen after the position command: rnb1kbnr/ppp1pppp/8/8/2qP4/8/PP3PPP/RNBQKBNR w KQkq - 0 5
+Zobrist hash: 10983517833516006275
+
+
+
+
+position fen rnb1kbnr/ppp1pppp/8/3q4/2PP4/8/PP3PPP/RNBQKBNR b KQkq c3 0 4 moves d5c4
+
+
+
+position fen rnb1kbnr/ppp1pppp/8/8/2qP4/8/PP3PPP/RNBQKBNR w KQkq - 0 5
+DEBUG: ChessBoard::set_from_fen completed. FEN: rnb1kbnr/ppp1pppp/8/8/2qP4/8/PP3PPP/RNBQKBNR w KQkq - 0 5
+DEBUG: ChessBoard::set_from_fen Zobrist Hash: 15681873148929463895
+Fen: rnb1kbnr/ppp1pppp/8/8/2qP4/8/PP3PPP/RNBQKBNR w KQkq - 0 5
+Active player: White
+Castling: WK 1, WQ 1, BK 1, BQ 1
+En passant: no
+Halfmove clock: 0
+Fullmove number: 5
+Zobrist Hash: 15681873148929463895
+White Pawns BB: 800e300
+White Knights BB: 42
+White Bishops BB: 24
+White Rooks BB: 81
+White Queens BB: 8
+White King BB: 10
+Black Pawns BB: f7000000000000
+Black Knights BB: 4200000000000000
+Black Bishops BB: 2400000000000000
+Black Rooks BB: 8100000000000000
+Black Queens BB: 4000000
+Black King BB: 1000000000000000
+White Occupied BB: 800e3ff
+Black Occupied BB: f7f7000004000000
+All Occupied BB: f7f700000c00e3ff
+Active Player King Square: e1
+Active Player King In Check: No
+
+
+
+
+position fen rnb1kbnr/ppp1pppp/8/3q4/2PP4/8/PP3PPP/RNBQKBNR b KQkq c3 0 4 moves d5c4
+Fen: rnb1kbnr/ppp1pppp/8/8/2qP4/8/PP3PPP/RNBQKBNR w KQkq - 0 5
+Active player: White
+Castling: WK 1, WQ 1, BK 1, BQ 1
+En passant: no
+Halfmove clock: 0
+Fullmove number: 5
+Zobrist Hash: 5926230331080869243
+White Pawns BB: 800e300
+White Knights BB: 42
+White Bishops BB: 24
+White Rooks BB: 81
+White Queens BB: 8
+White King BB: 10
+Black Pawns BB: f7000000000000
+Black Knights BB: 4200000000000000
+Black Bishops BB: 2400000000000000
+Black Rooks BB: 8100000000000000
+Black Queens BB: 4000000
+Black King BB: 1000000000000000
+White Occupied BB: 800e3ff
+Black Occupied BB: f7f7000004000000
+All Occupied BB: f7f700000c00e3ff
+Active Player King Square: e1
+Active Player King In Check: No
+
+
+fixed!
+
+
+position startpos
+go
+DEBUG: ChessAI (Alpha-Beta Single-threaded): Completed search to depth 5. Nodes: 45529, Branches: 78850, Time: 77ms, NPS: 591285
+DEBUG: ChessAI (Alpha-Beta Single-threaded): Chose move: b2b3 with score (current player's perspective at root): 100
+bestmove b2b3
+
+
+position startpos
+go
+DEBUG: ChessAI (Alpha-Beta Single-threaded): Completed search to depth 5. Nodes: 45529, Branches: 78850, Time: 75ms, NPS: 607053
+DEBUG: ChessAI (Alpha-Beta Single-threaded): Chose move: b2b3 with score (current player's perspective at root): 100
+bestmove b2b3
+
+
+
+

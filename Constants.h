@@ -9,7 +9,7 @@
 const uint64_t AI_SEARCH_DEPTH = 5;
 
 // Optional: Number of CPU cores/threads to use for parallel search (e.g., for root moves).
-const uint8_t NUMBER_OF_CORES_USED = 1;
+const uint8_t NUMBER_OF_CORES_USED = 4;
 
 // Define the different types of AI algorithms your engine can use.
 // This allows you to switch between AI strategies easily.
