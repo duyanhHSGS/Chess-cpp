@@ -1,6 +1,6 @@
 #include "ChessBitboardUtils.h"
 #include "Move.h"
-#include "MagicTables.h"
+#include "MagicTables.h" // DO NOT TOUCH
 #include <iostream>
 #include <vector>
 #include <stdexcept>
@@ -76,9 +76,9 @@ const uint8_t ChessBitboardUtils::CASTLE_BQ_BIT = 0b0001; // Black Queenside (q)
 // Attack tables (precomputed for performance).
 uint64_t ChessBitboardUtils::knight_attacks[64];
 uint64_t ChessBitboardUtils::king_attacks[64];
-uint64_t ChessBitboardUtils::white_pawn_attacks[64];
-uint64_t ChessBitboardUtils::black_pawn_attacks[64];
-bool ChessBitboardUtils::tables_initialized = false;
+// Consolidated pawn attacks into a 2D array [PlayerColor][square_idx]
+uint64_t ChessBitboardUtils::pawn_attacks[2][64];
+bool ChessBitboardUtils::tables_initialized = false; // Kept this for the specific file's existing structure
 
 // ============================================================================
 // Initialization of Static Attack Tables
@@ -91,8 +91,9 @@ void ChessBitboardUtils::initialize_attack_tables() {
 	for (int sq = 0; sq < 64; ++sq) {
 		knight_attacks[sq] = generate_knight_attacks(sq);
 		king_attacks[sq] = generate_king_attacks(sq);
-		white_pawn_attacks[sq] = generate_pawn_attacks(sq, PlayerColor::White);
-		black_pawn_attacks[sq] = generate_pawn_attacks(sq, PlayerColor::Black);
+		// Update to use the 2D pawn_attacks array
+		pawn_attacks[static_cast<int>(PlayerColor::White)][sq] = generate_pawn_attacks(sq, PlayerColor::White);
+		pawn_attacks[static_cast<int>(PlayerColor::Black)][sq] = generate_pawn_attacks(sq, PlayerColor::Black);
 	}
 	tables_initialized = true;
 }
@@ -100,9 +101,9 @@ void ChessBitboardUtils::initialize_attack_tables() {
 // Helper to generate knight attack bitmask for a given square.
 uint64_t ChessBitboardUtils::generate_knight_attacks(int square_idx) {
 	uint64_t attacks = 0ULL;
-	// Corrected knight move logic using file/rank differences
-	int r = square_to_rank(square_idx);
-	int f = square_to_file(square_idx);
+	// Direct calculation of rank and file from square_idx
+	int r = square_idx / 8;
+	int f = square_idx % 8;
 
 	// Deltas for knight moves relative to (rank, file)
 	int knight_dr[] = {-2, -2, -1, -1, 1, 1, 2, 2};
@@ -113,7 +114,7 @@ uint64_t ChessBitboardUtils::generate_knight_attacks(int square_idx) {
 		int new_f = f + knight_df[i];
 
 		if (new_r >= 0 && new_r < 8 && new_f >= 0 && new_f < 8) {
-			attacks |= (1ULL << rank_file_to_square(new_r, new_f));
+			attacks |= (1ULL << (new_r * 8 + new_f)); // Direct calculation of new square index
 		}
 	}
 	return attacks;
@@ -156,7 +157,7 @@ uint64_t ChessBitboardUtils::generate_pawn_attacks(int square_idx, PlayerColor c
 
 
 // ============================================================================
-// Bit Manipulation Functions
+// Bit Manipulation Functions (Optimized with intrinsics)
 // ============================================================================
 
 // Sets a bit at the given index in the bitboard.
@@ -183,52 +184,112 @@ bool ChessBitboardUtils::test_bit(uint64_t bitboard, int square_idx) {
 
 // Gets the index of the least significant bit (LSB) that is set to 1.
 // Returns 64 if the bitboard is empty.
-int ChessBitboardUtils::get_lsb_index(uint64_t bitboard) {
+// Optimized with compiler intrinsics.
+uint8_t ChessBitboardUtils::get_lsb_index(uint64_t bitboard) {
 	if (bitboard == 0) {
 		return 64; // Indicate no set bit
 	}
-#ifdef _MSC_VER
+#if defined(HAS_MSVC_INTRINSICS)
 	unsigned long index;
 	_BitScanForward64(&index, bitboard);
-	return index;
+	return static_cast<uint8_t>(index);
+#elif defined(HAS_BUILTIN_CTZLL)
+	return static_cast<uint8_t>(__builtin_ctzll(bitboard)); // Count trailing zeros for GCC/Clang
 #else
-	return __builtin_ctzll(bitboard); // Count trailing zeros for GCC/Clang
+	// Fallback loop version (less efficient)
+	uint8_t count = 0;
+	while ((bitboard & 1) == 0) {
+		bitboard >>= 1;
+		count++;
+	}
+	return count;
+#endif
+}
+
+// Gets the index of the most significant bit (MSB) that is set to 1.
+// Returns 64 if the bitboard is empty.
+// New function, optimized with compiler intrinsics.
+uint8_t ChessBitboardUtils::get_msb_index(uint64_t bitboard) {
+	if (bitboard == 0) {
+		return 64; // Indicate no set bit
+	}
+#if defined(HAS_MSVC_INTRINSICS)
+	unsigned long index;
+	_BitScanReverse64(&index, bitboard);
+	return static_cast<uint8_t>(index);
+#elif defined(HAS_BUILTIN_CLZLL)
+	// __builtin_clzll counts leading zeros. For a 64-bit unsigned long long,
+	// the MSB index is 63 - (number of leading zeros).
+	return static_cast<uint8_t>(63 - __builtin_clzll(bitboard));
+#else
+	// Fallback loop version (less efficient)
+	uint8_t count = 63;
+	while (!((bitboard >> count) & 1)) { // Check from MSB down
+		count--;
+	}
+	return count;
 #endif
 }
 
 // Pops (gets and clears) the least significant bit (LSB) from the bitboard.
 // Returns the index of the LSB, or 64 if the bitboard was empty.
-int ChessBitboardUtils::pop_lsb_index(uint64_t& bitboard) {
+// Optimized to use intrinsics or bit manipulation tricks.
+uint8_t ChessBitboardUtils::pop_bit(uint64_t& bitboard) {
 	if (bitboard == 0) {
 		return 64; // Indicate no set bit
 	}
-	int lsb_idx = get_lsb_index(bitboard);
-	clear_bit(bitboard, lsb_idx); // Clear the LSB
+#if defined(HAS_MSVC_INTRINSICS)
+	unsigned long index;
+	_BitScanForward64(&index, bitboard);
+	bitboard = _blsr_u64(bitboard); // Use _blsr_u64 for efficient LSB clear (resets lowest set bit)
+	return static_cast<uint8_t>(index);
+#elif defined(HAS_BUILTIN_CTZLL)
+	uint8_t lsb_idx = static_cast<uint8_t>(__builtin_ctzll(bitboard));
+	bitboard &= (bitboard - 1); // Clear the LSB (standard trick: Kernighan's algorithm)
 	return lsb_idx;
+#else
+	// Fallback loop version (less efficient)
+	uint8_t lsb_idx = get_lsb_index(bitboard); // This will use the slower loop fallback if intrinsics aren't available
+	clear_bit(bitboard, lsb_idx); // Clear the LSB using the generic clear_bit
+	return lsb_idx;
+#endif
 }
 
+
 // Counts the number of set bits (population count) in a bitboard.
-int ChessBitboardUtils::count_set_bits(uint64_t bitboard) {
-#ifdef _MSC_VER
-	return __popcnt64(bitboard); // Intrinsics for MSVC
+// Optimized with compiler intrinsics.
+uint8_t ChessBitboardUtils::count_set_bits(uint64_t bitboard) {
+#if defined(HAS_MSVC_INTRINSICS)
+	return static_cast<uint8_t>(__popcnt64(bitboard)); // Intrinsics for MSVC
+#elif defined(HAS_BUILTIN_POPCOUNTLL)
+	return static_cast<uint8_t>(__builtin_popcountll(bitboard)); // GCC/Clang intrinsic for popcount
 #else
-	return __builtin_popcountll(bitboard); // GCC/Clang intrinsic for popcount
+	// Fallback loop version (less efficient)
+	uint8_t count = 0;
+	while (bitboard > 0) {
+		bitboard &= (bitboard - 1); // Brian Kernighan's algorithm
+		count++;
+	}
+	return count;
 #endif
 }
 
 // Returns a vector of square indices where bits are set in the bitboard.
+// Updated to use the optimized pop_bit function.
 std::vector<int> ChessBitboardUtils::get_set_bits(uint64_t bitboard) {
 	std::vector<int> set_bits_indices;
+	// Pre-reserve an estimated capacity to reduce reallocations. Max 64 bits.
+	set_bits_indices.reserve(count_set_bits(bitboard));
+
 	while (bitboard) {
-		set_bits_indices.push_back(get_lsb_index(bitboard));
-		pop_lsb_index(bitboard); // Use pop_lsb_index to clear the bit
+		set_bits_indices.push_back(pop_bit(bitboard)); // Use pop_bit to get index and clear bit
 	}
 	return set_bits_indices;
 }
 
 
 // ============================================================================
-// Square and Coordinate Conversion Functions
+// Square and Coordinate Conversion Functions (No changes)
 // ============================================================================
 
 // Converts 0-63 square index to file (0-7).
@@ -300,7 +361,8 @@ uint64_t ChessBitboardUtils::get_bishop_attacks(int square, uint64_t occupancy) 
 bool ChessBitboardUtils::is_pawn_attacked_by(int target_sq, uint64_t pawn_attackers_bb, PlayerColor attacking_color) {
 	// Generate the pawn attacks *from* the target square (as if a pawn were there)
 	// then AND with the actual pawn attackers to see if any intersect.
-	uint64_t attacks_from_target = (attacking_color == PlayerColor::White) ? black_pawn_attacks[target_sq] : white_pawn_attacks[target_sq];
+	// Corrected to use the 2D pawn_attacks array:
+	uint64_t attacks_from_target = pawn_attacks[static_cast<int>(attacking_color == PlayerColor::White ? PlayerColor::Black : PlayerColor::White)][target_sq];
 	return (attacks_from_target & pawn_attackers_bb) != 0ULL;
 }
 

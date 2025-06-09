@@ -148,7 +148,7 @@ void MoveGenerator::generate_knight_moves(const ChessBoard& board, int square_id
     attacks &= ~friendly_occupied_squares;
 
     while (attacks) {
-        int target_sq = ChessBitboardUtils::pop_lsb_index(attacks);
+        int target_sq = ChessBitboardUtils::pop_bit(attacks);
         
         PieceTypeIndex captured_type = PieceTypeIndex::NONE;
         if (ChessBitboardUtils::test_bit(board.occupied_squares, target_sq)) {
@@ -196,7 +196,7 @@ void MoveGenerator::generate_sliding_piece_moves_helper(const ChessBoard& board,
     attacks &= ~friendly_occupied;
 
     while (attacks) {
-        int target_sq = ChessBitboardUtils::pop_lsb_index(attacks);
+        int target_sq = ChessBitboardUtils::pop_bit(attacks);
 
         PieceTypeIndex captured_type = PieceTypeIndex::NONE;
         if (ChessBitboardUtils::test_bit(board.occupied_squares, target_sq)) {
@@ -247,7 +247,7 @@ void MoveGenerator::generate_king_moves(const ChessBoard& board, int square_idx,
     attacks &= ~friendly_occupied_squares;
 
     while (attacks) {
-        int target_sq = ChessBitboardUtils::pop_lsb_index(attacks);
+        int target_sq = ChessBitboardUtils::pop_bit(attacks);
         
         PieceTypeIndex captured_type = PieceTypeIndex::NONE;
         if (ChessBitboardUtils::test_bit(board.occupied_squares, target_sq)) {
@@ -323,14 +323,15 @@ void MoveGenerator::generate_king_moves(const ChessBoard& board, int square_idx,
 
 std::vector<Move> MoveGenerator::generate_legal_moves(ChessBoard& board) {
     std::vector<Move> pseudo_legal_moves;
+    pseudo_legal_moves.reserve(MAX_MOVES); 
     std::vector<Move> legal_moves;
-
+    
     PlayerColor current_player = board.active_player;
     uint64_t player_pieces_bb = (current_player == PlayerColor::White) ? board.white_occupied_squares : board.black_occupied_squares;
 
     uint64_t temp_player_pieces_bb = player_pieces_bb;
     while (temp_player_pieces_bb != 0ULL) {
-        int square_idx = ChessBitboardUtils::pop_lsb_index(temp_player_pieces_bb);
+        int square_idx = ChessBitboardUtils::pop_bit(temp_player_pieces_bb);
 
         PieceTypeIndex piece_type = PieceTypeIndex::NONE;
         if (current_player == PlayerColor::White) {

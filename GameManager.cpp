@@ -1,5 +1,4 @@
 #include "GameManager.h"
-#include "UciHandler.h"
 #include "ChessBitboardUtils.h"
 #include <iostream>
 #include <sstream>
@@ -9,13 +8,12 @@
 
 GameManager::GameManager()
 	: board(),
-	  chess_ai() {
+	  chess_ai(),
+	  uci_handler() {
 	ChessBitboardUtils::initialize_attack_tables();
 }
 
 void GameManager::run() {
-	UciHandler uci_handler;
-
 	std::string line;
 	while (std::getline(std::cin, line)) {
 		std::stringstream ss(line);
@@ -41,14 +39,12 @@ void GameManager::run() {
 }
 
 void GameManager::handleUciCommand() {
-	UciHandler uci_handler;
-	uci_handler.sendUciIdentity();
-	uci_handler.sendUciOk();
+	this->uci_handler.sendUciIdentity();
+	this->uci_handler.sendUciOk();
 }
 
 void GameManager::handleIsReadyCommand() {
-	UciHandler uci_handler;
-	uci_handler.sendReadyOk();
+	this->uci_handler.sendReadyOk();
 }
 
 void GameManager::handleUciNewGameCommand() {
@@ -56,70 +52,69 @@ void GameManager::handleUciNewGameCommand() {
 }
 
 void GameManager::handlePositionCommand(const std::string& command_line) {
-	std::stringstream ss(command_line);
-	std::string token;
-	ss >> token;
+    std::stringstream ss(command_line);
+    std::string token;
+    std::string sub_command;
+    std::string current_token_after_board_setup;
 
-	std::string sub_command;
-	ss >> sub_command;
+    ss >> token >> sub_command;
 
-	std::string temp_word;
+    if (sub_command == "startpos") {
+        board.reset_to_start_position();
+        if (ss >> current_token_after_board_setup) {
+        }
+    } else if (sub_command == "fen") {
+        std::string fen_string_builder;
+        int fen_components_read = 0;
+        while (ss >> current_token_after_board_setup && current_token_after_board_setup != "moves" && fen_components_read < 6) {
+            if (!fen_string_builder.empty()) {
+                fen_string_builder += " ";
+            }
+            fen_string_builder += current_token_after_board_setup;
+            fen_components_read++;
+        }
+        board.set_from_fen(fen_string_builder);
+    } else {
+        std::cerr << "DEBUG: Invalid position command: " << sub_command << std::endl;
+        return;
+    }
 
-	if (sub_command == "startpos") {
-		board.reset_to_start_position();
-		ss >> temp_word;
-	} else if (sub_command == "fen") {
-		std::string fen_string_part;
-		while (ss >> temp_word && temp_word != "moves") {
-			if (!fen_string_part.empty()) {
-				fen_string_part += " ";
-			}
-			fen_string_part += temp_word;
-		}
-		board.set_from_fen(fen_string_part);
-	} else {
-		return;
-	}
-
-	if (temp_word == "moves") {
+    if (current_token_after_board_setup == "moves") {
+        MoveGenerator move_gen_local;
 		std::string move_str;
-		MoveGenerator move_gen;
 		while (ss >> move_str) {
-			std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
+            std::vector<Move> current_legal_moves = move_gen_local.generate_legal_moves(board);
+
 			bool move_found = false;
-			for (const auto& legal_move : legal_moves) {
+            Move found_move({0, 0}, {0, 0}, PieceTypeIndex::NONE);
+
+			for (const auto& legal_move : current_legal_moves) {
 				if (ChessBitboardUtils::move_to_string(legal_move) == move_str) {
-					StateInfo info_for_undo;
-					board.apply_move(legal_move, info_for_undo);
+					found_move = legal_move;
 					move_found = true;
 					break;
 				}
 			}
-			if (!move_found) {
+
+			if (move_found) {
+				StateInfo info_for_undo;
+				board.apply_move(found_move, info_for_undo);
+			} else {
 				std::cerr << "DEBUG: Invalid move encountered in 'position moves' command: " << move_str << std::endl;
 				std::cerr << "DEBUG: Current FEN when invalid move was encountered: " << board.to_fen() << std::endl;
 				break;
 			}
 		}
 	}
-//	MoveGenerator move_gen;
-//	std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
-//
-//	std::cout << "Legal moves for " << (board.active_player == PlayerColor::White ? "White" : "Black") << ":\n";
-//	for (const auto& move : legal_moves) {
-//		std::cout << ChessBitboardUtils::move_to_string(move) << " ";
-//	}
-//	std::cout << std::endl;
 }
 
-void GameManager::handleGoCommand() {
-	UciHandler uci_handler;
 
+void GameManager::handleGoCommand() {
 	Move best_move = chess_ai.findBestMove(board);
 
 	if (best_move.piece_moved_type_idx == PieceTypeIndex::NONE) {
-		uci_handler.sendBestMove("(none)");
+		this->uci_handler.sendBestMove("(none)");
 	} else {
-		uci_handler.sendBestMove(ChessBitboardUtils::move_to_string(best_move));
+		this->uci_handler.sendBestMove(ChessBitboardUtils::move_to_string(best_move));
 	}
 }

@@ -1,6 +1,6 @@
 #include "ChessAI.h"
 #include "MoveGenerator.h"
-#include "Constants.h"
+#include "Constants.h" // For AI_SEARCH_DEPTH
 #include "ChessBitboardUtils.h"
 
 #include <iostream>
@@ -11,12 +11,14 @@
 #include <cmath>
 #include <string>
 
-ChessAI::ChessAI() {
+ChessAI::ChessAI() : move_gen() {
     nodes_evaluated_count = 0;
     branches_explored_count = 0;
     current_search_depth_set = 0;
 }
 
+// Basic material and positional evaluation function.
+// Scores from White's perspective.
 int ChessAI::evaluate(const ChessBoard& board) const {
     int score = 0;
     const int PAWN_VALUE   = 100;
@@ -24,18 +26,22 @@ int ChessAI::evaluate(const ChessBoard& board) const {
     const int BISHOP_VALUE = 330;
     const int ROOK_VALUE   = 500;
     const int QUEEN_VALUE  = 900;
+    const int KING_VALUE   = 20000;
 
+    // Iterate through all squares and sum up piece values + PST values
     for (int i = 0; i < 64; ++i) {
-        if (ChessBitboardUtils::test_bit(board.white_pawns, i))    score += PAWN_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.white_knights, i)) score += KNIGHT_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.white_bishops, i)) score += BISHOP_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.white_rooks, i))  score += ROOK_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.white_queens, i)) score += QUEEN_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.black_pawns, i))   score -= PAWN_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.black_knights, i)) score -= KNIGHT_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.black_bishops, i)) score -= BISHOP_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.black_rooks, i))  score -= ROOK_VALUE;
-        else if (ChessBitboardUtils::test_bit(board.black_queens, i)) score -= QUEEN_VALUE;
+        if (ChessBitboardUtils::test_bit(board.white_pawns, i))    score += (PAWN_VALUE + PAWN_PST[i]);
+        else if (ChessBitboardUtils::test_bit(board.white_knights, i)) score += (KNIGHT_VALUE + KNIGHT_PST[i]);
+        else if (ChessBitboardUtils::test_bit(board.white_bishops, i)) score += (BISHOP_VALUE + BISHOP_PST[i]);
+        else if (ChessBitboardUtils::test_bit(board.white_rooks, i))  score += (ROOK_VALUE + ROOK_PST[i]);
+        else if (ChessBitboardUtils::test_bit(board.white_queens, i)) score += (QUEEN_VALUE + QUEEN_PST[i]);
+        else if (ChessBitboardUtils::test_bit(board.white_king, i)) score += (KING_VALUE + KING_PST[i]);
+        else if (ChessBitboardUtils::test_bit(board.black_pawns, i))   score -= (PAWN_VALUE + PAWN_PST[63 - i]); // Mirror for Black
+        else if (ChessBitboardUtils::test_bit(board.black_knights, i)) score -= (KNIGHT_VALUE + KNIGHT_PST[63 - i]); // Mirror for Black
+        else if (ChessBitboardUtils::test_bit(board.black_bishops, i)) score -= (BISHOP_VALUE + BISHOP_PST[63 - i]); // Mirror for Black
+        else if (ChessBitboardUtils::test_bit(board.black_rooks, i))  score -= (ROOK_VALUE + ROOK_PST[63 - i]); // Mirror for Black
+        else if (ChessBitboardUtils::test_bit(board.black_queens, i)) score -= (QUEEN_VALUE + QUEEN_PST[63 - i]); // Mirror for Black
+        else if (ChessBitboardUtils::test_bit(board.black_king, i)) score -= (KING_VALUE + KING_PST[63 - i]); // Mirror for Black
     }
     return score;
 }
@@ -48,13 +54,16 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta, std::v
         return (board.active_player == PlayerColor::White) ? evaluate(board) : -evaluate(board);
     }
 
-    MoveGenerator move_gen;
     std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
 
     branches_explored_count += legal_moves.size();
 
     if (legal_moves.empty()) {
-        return (board.active_player == PlayerColor::White) ? evaluate(board) : -evaluate(board);
+        if (board.is_king_in_check(board.active_player)) {
+            return -MATE_VALUE + (current_search_depth_set - depth);
+        } else {
+            return 0;
+        }
     }
 
     Move best_move_this_node = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
@@ -69,11 +78,7 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta, std::v
         board.undo_move(move, info_for_undo);
 
         if (score >= beta) {
-            variation.emplace_back(move.from_square, move.to_square,
-                                   move.piece_moved_type_idx, move.piece_captured_type_idx,
-                                   move.is_promotion, move.promotion_piece_type_idx,
-                                   move.is_kingside_castle, move.is_queenside_castle,
-                                   move.is_en_passant, move.is_double_pawn_push);
+            variation.push_back(move);
             variation.insert(variation.end(), sub_variation.begin(), sub_variation.end());
             return beta;
         }
@@ -85,13 +90,10 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta, std::v
     }
 
     if (best_move_this_node.piece_moved_type_idx != PieceTypeIndex::NONE) {
-        variation.emplace_back(best_move_this_node.from_square, best_move_this_node.to_square,
-                               best_move_this_node.piece_moved_type_idx, best_move_this_node.piece_captured_type_idx,
-                               best_move_this_node.is_promotion, best_move_this_node.promotion_piece_type_idx,
-                               best_move_this_node.is_kingside_castle, best_move_this_node.is_queenside_castle,
-                               best_move_this_node.is_en_passant, best_move_this_node.is_double_pawn_push);
+        variation.push_back(best_move_this_node);
         variation.insert(variation.end(), best_sub_variation_this_node.begin(), best_sub_variation_this_node.end());
     }
+    
     return alpha;
 }
 
@@ -100,7 +102,6 @@ Move ChessAI::findBestMove(ChessBoard& board) {
     branches_explored_count = 0;
     current_search_depth_set = AI_SEARCH_DEPTH;
 
-    MoveGenerator move_gen;
     std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
 
     if (legal_moves.empty()) {
@@ -111,22 +112,18 @@ Move ChessAI::findBestMove(ChessBoard& board) {
     PlayerColor original_active_player = board.active_player;
 
     Move final_chosen_move = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
-    int best_eval = -99999999;
-    int alpha = -99999999;
-    int beta = 99999999;
+    int best_eval = -MATE_VALUE - 1;
+    int alpha = -MATE_VALUE - 1;
+    int beta = MATE_VALUE + 1;
     std::vector<Move> best_variation;
 
     auto start_time = std::chrono::high_resolution_clock::now();
     for (const auto& move : legal_moves) {
         StateInfo info_for_undo;
-        // The ChessBoard temp_board_for_eval = board; was removed here.
-        // Instead, we apply the move directly to the 'board' passed by reference.
         board.apply_move(move, info_for_undo);
 
         std::vector<Move> current_variation;
-        // Pass 'board' directly to alphaBeta, as the move has now been applied to it.
         int current_score = -alphaBeta(board, AI_SEARCH_DEPTH - 1, -beta, -alpha, current_variation);
-        // Undo the move immediately after the recursive call returns to restore the board state.
         board.undo_move(move, info_for_undo);
 
         if (current_score > best_eval) {
@@ -169,7 +166,9 @@ Move ChessAI::findBestMove(ChessBoard& board) {
     }
 
     std::string score_string;
-    if (final_display_score > 0) {
+    if (std::abs(final_display_score) >= MATE_VALUE) {
+        score_string = "mate " + std::to_string((MATE_VALUE - std::abs(final_display_score) + current_search_depth_set) * (final_display_score > 0 ? 1 : -1));
+    } else if (final_display_score > 0) {
         score_string = "+" + std::to_string(final_display_score);
     } else if (final_display_score < 0) {
         score_string = std::to_string(final_display_score);

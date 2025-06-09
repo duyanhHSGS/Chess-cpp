@@ -7,6 +7,27 @@
 #include <array>   // For std::array (used for deltas in MoveGenerator, indirectly related here)
 #include "Types.h" // For PlayerColor, PieceTypeIndex, GamePoint
 
+// ============================================================================
+// Compiler Intrinsics Definitions (New additions for speed)
+// ============================================================================
+
+// Check for GCC/Clang built-in functions
+#if defined(__GNUC__) || defined(__clang__)
+#define HAS_BUILTIN_CTZLL // Count Trailing Zeros Long Long (LSB)
+#define HAS_BUILTIN_CLZLL // Count Leading Zeros Long Long (MSB)
+#define HAS_BUILTIN_POPCOUNTLL // Population Count Long Long (set bits)
+#endif
+
+// Check for MSVC intrinsics
+#if defined(_MSC_VER)
+#include <intrin.h> // Required for MSVC intrinsics
+#define HAS_MSVC_INTRINSICS
+#endif
+
+// ============================================================================
+// End Compiler Intrinsics Definitions
+// ============================================================================
+
 // Forward declaration of Move struct from Move.h, as it's used in move_to_string.
 struct Move;
 
@@ -85,8 +106,8 @@ struct ChessBitboardUtils {
 	// Precomputed attack tables for non-sliding pieces.
 	static uint64_t knight_attacks[64];      // Stores attack masks for a knight on each square.
 	static uint64_t king_attacks[64];        // Stores attack masks for a king on each square.
-	static uint64_t white_pawn_attacks[64];  // Stores attack masks for a white pawn on each square.
-	static uint64_t black_pawn_attacks[64];  // Stores attack masks for a black pawn on each square.
+	// Consolidated pawn attacks into a 2D array [PlayerColor][square_idx]
+	static uint64_t pawn_attacks[2][64];
 	static bool tables_initialized; // Flag to ensure tables are initialized only once.
 
 
@@ -103,7 +124,7 @@ struct ChessBitboardUtils {
 	static uint64_t generate_pawn_attacks(int square_idx, PlayerColor color);
 
 	// ============================================================================
-	// Bit Manipulation Functions
+	// Bit Manipulation Functions (Optimized with intrinsics)
 	// ============================================================================
 
 	// Sets the bit at 'square_idx' in 'bitboard'.
@@ -112,20 +133,30 @@ struct ChessBitboardUtils {
 	static void clear_bit(uint64_t& bitboard, int square_idx);
 	// Returns true if the bit at 'square_idx' in 'bitboard' is set.
 	static bool test_bit(uint64_t bitboard, int square_idx);
+
 	// Returns the index of the least significant bit (LSB) set in 'bitboard'.
-	// Returns 64 if bitboard is 0.
-	static int get_lsb_index(uint64_t bitboard);
-	// Returns the index of the LSB set in 'bitboard' and clears that bit.
-	// Returns 64 if bitboard was 0.
-	static int pop_lsb_index(uint64_t& bitboard);
+	// Returns 64 if bitboard is 0. (Optimized with intrinsics)
+	static uint8_t get_lsb_index(uint64_t bitboard);
+
+	// Returns the index of the most significant bit (MSB) set in 'bitboard'.
+	// Returns 64 if bitboard is 0. (New function, optimized with intrinsics)
+	static uint8_t get_msb_index(uint64_t bitboard);
+
 	// Counts the number of set bits (population count) in a bitboard.
-	static int count_set_bits(uint64_t bitboard);
+	// (Optimized with intrinsics)
+	static uint8_t count_set_bits(uint64_t bitboard);
+
+	// Pops (clears and returns the index of) the least significant bit (LSB) from a bitboard.
+	// Returns 64 if bitboard is 0 before popping. (Optimized to use new get_lsb_index)
+	static uint8_t pop_bit(uint64_t& bitboard);
+
 	// Returns a vector of all square indices where bits are set in the bitboard.
+	// (Updated to use pop_bit for efficiency)
 	static std::vector<int> get_set_bits(uint64_t bitboard);
 
 
 	// ============================================================================
-	// Square and Coordinate Conversion Functions
+	// Square and Coordinate Conversion Functions (No changes)
 	// ============================================================================
 
 	// Converts a 0-63 square index to its file (0-7, 'a' to 'h').
@@ -141,7 +172,7 @@ struct ChessBitboardUtils {
 
 
 	// ============================================================================
-	// Attack Detection Functions (Sliding Pieces)
+	// Attack Detection Functions (Sliding Pieces - No changes to logic, only pawn attacks updated)
 	// ============================================================================
 
 	static uint64_t get_rook_attacks(int square, uint64_t occupancy);
@@ -160,4 +191,4 @@ struct ChessBitboardUtils {
 	static bool is_bishop_queen_attacked_by(int target_sq, uint64_t bishop_queen_attackers_bb, uint64_t occupied_bb);
 };
 
-#endif // CHESS_BITBOARD_UTILS_H
+#endif // CHESS_BITBOARD_UTILS_

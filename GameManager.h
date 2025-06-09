@@ -8,6 +8,7 @@
 #include "Move.h"
 #include "MoveGenerator.h"
 #include "ChessAI.h"
+#include "UciHandler.h"
 
 class GameManager {
 public:
@@ -17,17 +18,13 @@ public:
 
 private:
     ChessBoard board;
-
     ChessAI chess_ai;
+    UciHandler uci_handler; 
 
     void handleUciCommand();
-
     void handleIsReadyCommand();
-
     void handleUciNewGameCommand();
-
     void handlePositionCommand(const std::string& command_line);
-
     void handleGoCommand();
 };
 
