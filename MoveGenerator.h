@@ -34,16 +34,9 @@ struct MoveGenerator {
     void generate_king_moves(const ChessBoard& board, int square_idx, std::vector<Move>& pseudo_legal_moves);
 
 private:
-    // Static arrays for sliding piece deltas to avoid repeated allocation.
-    // These are declared here and defined in MoveGenerator.cpp.
-    static const std::array<int, 4> BISHOP_DELTAS; // Directions: NW, NE, SW, SE
-    static const std::array<int, 4> ROOK_DELTAS;    // Directions: N, S, E, W
-    static const std::array<int, 8> QUEEN_DELTAS;   // Directions: All 8
-
     // Helper for generating pseudo-legal sliding moves (Bishop, Rook, Queen).
     // It takes the specific delta array for the piece type.
-    template<size_t N>
-    void generate_sliding_piece_moves_helper(const ChessBoard& board, int square_idx, PieceTypeIndex piece_type, std::vector<Move>& pseudo_legal_moves, const std::array<int, N>& deltas);
+    void generate_sliding_piece_moves_helper(const ChessBoard& board, int square_idx, PieceTypeIndex piece_type, std::vector<Move>& pseudo_legal_moves);
 
     // Helper to check if a square is attacked by a given color.
     // This helper works on a const board reference as it only queries attack state.

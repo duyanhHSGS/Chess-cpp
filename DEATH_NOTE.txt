@@ -370,11 +370,25 @@ DEBUG: ChessAI (Alpha-Beta Single-threaded): Completed search to depth 5. Nodes:
 DEBUG: ChessAI (Alpha-Beta Single-threaded): Chose move: b2b3 with score (current player's perspective at root): 100
 bestmove b2b3
 
-
+// before magic
 position startpos
 go
-DEBUG: ChessAI (Alpha-Beta Single-threaded): Completed search to depth 5. Nodes: 45529, Branches: 78850, Time: 75ms, NPS: 607053
-DEBUG: ChessAI (Alpha-Beta Single-threaded): Chose move: b2b3 with score (current player's perspective at root): 100
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 45529, Branches: 78850, Time: 75ms, NPS: 607053
+DEBUG: Carolyna: Chose move: b2b3 with score (current player's perspective at root): 100
+bestmove b2b3
+
+// after magic
+DEBUG: Carolyna: Principal Variation: b2b3 a7a6 c1b2 a6a5 b2g7
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 45481, Branches: 78800, Time: 79ms, NPS: 575708
+DEBUG: Carolyna : Chose move for White: b2b3 with score: +100
+bestmove b2b3
+
+
+
+go
+DEBUG: Carolyna: Principal Variation: b2b3 a7a6 c1b2 a6a5 b2g7
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 45481, Branches: 78800, Time: 80ms, NPS: 568512
+DEBUG: Carolyna : Chose move for White: b2b3 with score: +100
 bestmove b2b3
 
 

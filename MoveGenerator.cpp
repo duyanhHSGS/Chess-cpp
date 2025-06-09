@@ -1,13 +1,8 @@
 #include "MoveGenerator.h"
 #include "ChessBitboardUtils.h"
+#include "MagicTables.h"
 #include <cmath>
 #include <array>
-
-
-const std::array<int, 4> MoveGenerator::BISHOP_DELTAS = {-9, -7, 7, 9};
-const std::array<int, 4> MoveGenerator::ROOK_DELTAS = {-8, 8, -1, 1};
-const std::array<int, 8> MoveGenerator::QUEEN_DELTAS = {-9, -8, -7, -1, 1, 7, 8, 9};
-
 
 bool MoveGenerator::is_square_attacked(int square_idx, PlayerColor attacking_color, const ChessBoard& board) {
     uint64_t enemy_pawns_bb = (attacking_color == PlayerColor::White) ? board.white_pawns : board.black_pawns;
@@ -178,84 +173,69 @@ void MoveGenerator::generate_knight_moves(const ChessBoard& board, int square_id
     }
 }
 
-template<size_t N>
-void MoveGenerator::generate_sliding_piece_moves_helper(const ChessBoard& board, int square_idx, PieceTypeIndex piece_type, std::vector<Move>& pseudo_legal_moves, const std::array<int, N>& deltas) {
+void MoveGenerator::generate_sliding_piece_moves_helper(const ChessBoard& board, int square_idx, PieceTypeIndex piece_type, std::vector<Move>& pseudo_legal_moves) {
     PlayerColor color = board.active_player;
-    uint64_t friendly_occupied_squares = (color == PlayerColor::White) ? board.white_occupied_squares : board.black_occupied_squares;
-    uint64_t enemy_occupied_squares = (color == PlayerColor::White) ? board.black_occupied_squares : board.white_occupied_squares;
+    uint64_t occupancy = board.occupied_squares;
+    uint64_t attacks = 0ULL;
 
-    for (int delta : deltas) {
-        int target_sq = square_idx; 
-        int prev_sq = square_idx;   
+    switch (piece_type) {
+        case PieceTypeIndex::ROOK:
+            attacks = ChessBitboardUtils::get_rook_attacks(square_idx, occupancy);
+            break;
+        case PieceTypeIndex::BISHOP:
+            attacks = ChessBitboardUtils::get_bishop_attacks(square_idx, occupancy);
+            break;
+        case PieceTypeIndex::QUEEN:
+            attacks = ChessBitboardUtils::get_rook_attacks(square_idx, occupancy) | ChessBitboardUtils::get_bishop_attacks(square_idx, occupancy);
+            break;
+        default:
+            return;
+    }
 
-        while (true) {
-            target_sq += delta; 
+    uint64_t friendly_occupied = (color == PlayerColor::White) ? board.white_occupied_squares : board.black_occupied_squares;
+    attacks &= ~friendly_occupied;
 
-            if (target_sq < 0 || target_sq >= 64) break;
-            
-            int prev_file = ChessBitboardUtils::square_to_file(prev_sq);
-            int prev_rank = ChessBitboardUtils::square_to_rank(prev_sq);
-            int current_file = ChessBitboardUtils::square_to_file(target_sq);
-            int current_rank = ChessBitboardUtils::square_to_rank(target_sq);
+    while (attacks) {
+        int target_sq = ChessBitboardUtils::pop_lsb_index(attacks);
 
-            if (std::abs(delta) == 1) { // Horizontal moves
-                if (prev_rank != current_rank) break; 
-            } else if (std::abs(delta) == 8) { // Vertical moves
-                if (prev_file != current_file) break;
-            } else { // Diagonal moves (delta +/- 7, +/- 9)
-                if (std::abs(current_file - prev_file) != 1 || std::abs(current_rank - prev_rank) != 1) {
-                    break; 
-                }
+        PieceTypeIndex captured_type = PieceTypeIndex::NONE;
+        if (ChessBitboardUtils::test_bit(board.occupied_squares, target_sq)) {
+            if (color == PlayerColor::White) {
+                if (ChessBitboardUtils::test_bit(board.black_pawns, target_sq)) captured_type = PieceTypeIndex::PAWN;
+                else if (ChessBitboardUtils::test_bit(board.black_knights, target_sq)) captured_type = PieceTypeIndex::KNIGHT;
+                else if (ChessBitboardUtils::test_bit(board.black_bishops, target_sq)) captured_type = PieceTypeIndex::BISHOP;
+                else if (ChessBitboardUtils::test_bit(board.black_rooks, target_sq)) captured_type = PieceTypeIndex::ROOK;
+                else if (ChessBitboardUtils::test_bit(board.black_queens, target_sq)) captured_type = PieceTypeIndex::QUEEN;
+                else if (ChessBitboardUtils::test_bit(board.black_king, target_sq)) captured_type = PieceTypeIndex::KING;
+            } else {
+                if (ChessBitboardUtils::test_bit(board.white_pawns, target_sq)) captured_type = PieceTypeIndex::PAWN;
+                else if (ChessBitboardUtils::test_bit(board.white_knights, target_sq)) captured_type = PieceTypeIndex::KNIGHT;
+                else if (ChessBitboardUtils::test_bit(board.white_bishops, target_sq)) captured_type = PieceTypeIndex::BISHOP;
+                else if (ChessBitboardUtils::test_bit(board.white_rooks, target_sq)) captured_type = PieceTypeIndex::ROOK;
+                else if (ChessBitboardUtils::test_bit(board.white_queens, target_sq)) captured_type = PieceTypeIndex::QUEEN;
+                else if (ChessBitboardUtils::test_bit(board.white_king, target_sq)) captured_type = PieceTypeIndex::KING;
             }
-
-            if (ChessBitboardUtils::test_bit(friendly_occupied_squares, target_sq)) {
-                break;
-            }
-
-            PieceTypeIndex captured_type = PieceTypeIndex::NONE;
-            bool is_capture = false;
-            if (ChessBitboardUtils::test_bit(enemy_occupied_squares, target_sq)) {
-                is_capture = true;
-                if (color == PlayerColor::White) {
-                    if (ChessBitboardUtils::test_bit(board.black_pawns, target_sq)) captured_type = PieceTypeIndex::PAWN;
-                    else if (ChessBitboardUtils::test_bit(board.black_knights, target_sq)) captured_type = PieceTypeIndex::KNIGHT;
-                    else if (ChessBitboardUtils::test_bit(board.black_bishops, target_sq)) captured_type = PieceTypeIndex::BISHOP;
-                    else if (ChessBitboardUtils::test_bit(board.black_rooks, target_sq)) captured_type = PieceTypeIndex::ROOK;
-                    else if (ChessBitboardUtils::test_bit(board.black_queens, target_sq)) captured_type = PieceTypeIndex::QUEEN;
-                    else if (ChessBitboardUtils::test_bit(board.black_king, target_sq)) captured_type = PieceTypeIndex::KING;
-                } else {
-                    if (ChessBitboardUtils::test_bit(board.white_pawns, target_sq)) captured_type = PieceTypeIndex::PAWN;
-                    else if (ChessBitboardUtils::test_bit(board.white_knights, target_sq)) captured_type = PieceTypeIndex::KNIGHT;
-                    else if (ChessBitboardUtils::test_bit(board.white_bishops, target_sq)) captured_type = PieceTypeIndex::BISHOP;
-                    else if (ChessBitboardUtils::test_bit(board.white_rooks, target_sq)) captured_type = PieceTypeIndex::ROOK;
-                    else if (ChessBitboardUtils::test_bit(board.white_queens, target_sq)) captured_type = PieceTypeIndex::QUEEN;
-                    else if (ChessBitboardUtils::test_bit(board.white_king, target_sq)) captured_type = PieceTypeIndex::KING;
-                }
-            }
-
-            pseudo_legal_moves.emplace_back(GamePoint{ChessBitboardUtils::square_to_file(square_idx), ChessBitboardUtils::square_to_rank(square_idx)},
-                                             GamePoint{ChessBitboardUtils::square_to_file(target_sq), ChessBitboardUtils::square_to_rank(target_sq)},
-                                             piece_type, captured_type);
-
-            if (is_capture) {
-                break;
-            }
-            
-            prev_sq = target_sq;
         }
+
+        pseudo_legal_moves.emplace_back(
+            GamePoint{ChessBitboardUtils::square_to_file(square_idx), ChessBitboardUtils::square_to_rank(square_idx)},
+            GamePoint{ChessBitboardUtils::square_to_file(target_sq), ChessBitboardUtils::square_to_rank(target_sq)},
+            piece_type,
+            captured_type
+        );
     }
 }
 
 void MoveGenerator::generate_bishop_moves(const ChessBoard& board, int square_idx, std::vector<Move>& pseudo_legal_moves) {
-    generate_sliding_piece_moves_helper(board, square_idx, PieceTypeIndex::BISHOP, pseudo_legal_moves, BISHOP_DELTAS);
+    generate_sliding_piece_moves_helper(board, square_idx, PieceTypeIndex::BISHOP, pseudo_legal_moves);
 }
 
 void MoveGenerator::generate_rook_moves(const ChessBoard& board, int square_idx, std::vector<Move>& pseudo_legal_moves) {
-    generate_sliding_piece_moves_helper(board, square_idx, PieceTypeIndex::ROOK, pseudo_legal_moves, ROOK_DELTAS);
+    generate_sliding_piece_moves_helper(board, square_idx, PieceTypeIndex::ROOK, pseudo_legal_moves);
 }
 
 void MoveGenerator::generate_queen_moves(const ChessBoard& board, int square_idx, std::vector<Move>& pseudo_legal_moves) {
-    generate_sliding_piece_moves_helper(board, square_idx, PieceTypeIndex::QUEEN, pseudo_legal_moves, QUEEN_DELTAS);
+    generate_sliding_piece_moves_helper(board, square_idx, PieceTypeIndex::QUEEN, pseudo_legal_moves);
 }
 
 void MoveGenerator::generate_king_moves(const ChessBoard& board, int square_idx, std::vector<Move>& pseudo_legal_moves) {

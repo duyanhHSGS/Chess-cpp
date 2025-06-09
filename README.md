@@ -4,7 +4,7 @@
 - Carolyna is where my mind rests
 
 ## To be added
-- [ ] **Add magic bitboards**: magic!!
+- **DONE**: **Add magic bitboards**: magic!!
 
 ## Setup
 To run this project:
