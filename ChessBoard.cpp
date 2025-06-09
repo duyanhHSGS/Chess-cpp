@@ -3,7 +3,7 @@
 #include "Types.h"
 #include "Move.h"
 #include <random>
-#include <chrono>
+//#include <chrono>
 #include <sstream>
 #include <cctype>
 #include <algorithm>
@@ -32,7 +32,7 @@ ChessBoard::ChessBoard(const std::string& fen) {
 }
 
 void ChessBoard::initialize_zobrist_keys() {
-    std::mt19937_64 rng(std::chrono::steady_clock::now().time_since_epoch().count());
+    std::mt19937_64 rng(std::hash<std::string>{}("Carolyna is where my mind rests!"));
     std::uniform_int_distribution<uint64_t> dist;
 
     for (int i = 0; i < 12; ++i) {

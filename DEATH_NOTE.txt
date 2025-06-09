@@ -392,5 +392,12 @@ DEBUG: Carolyna : Chose move for White: b2b3 with score: +100
 bestmove b2b3
 
 
+after pst:  more nodes!!!
+position startpos
+go
+DEBUG: Carolyna: Principal Variation: e2e4 b8c6 f1b5 c6d4 b5d7
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 199713, Branches: 433550, Time: 331ms, NPS: 603362
+DEBUG: Carolyna : Chose move for White: e2e4 with score: +70
+bestmove e2e4
 
 

@@ -1,6 +1,6 @@
 #include "ChessAI.h"
 #include "MoveGenerator.h"
-#include "Constants.h" // For AI_SEARCH_DEPTH
+#include "Constants.h"
 #include "ChessBitboardUtils.h"
 
 #include <iostream>
@@ -11,14 +11,17 @@
 #include <cmath>
 #include <string>
 
+
 ChessAI::ChessAI() : move_gen() {
     nodes_evaluated_count = 0;
     branches_explored_count = 0;
     current_search_depth_set = 0;
+    transposition_table.resize(TT_SIZE);
+    for (size_t i = 0; i < TT_SIZE; ++i) {
+        transposition_table[i].hash = 0;
+    }
 }
 
-// Basic material and positional evaluation function.
-// Scores from White's perspective.
 int ChessAI::evaluate(const ChessBoard& board) const {
     int score = 0;
     const int PAWN_VALUE   = 100;
@@ -28,7 +31,6 @@ int ChessAI::evaluate(const ChessBoard& board) const {
     const int QUEEN_VALUE  = 900;
     const int KING_VALUE   = 20000;
 
-    // Iterate through all squares and sum up piece values + PST values
     for (int i = 0; i < 64; ++i) {
         if (ChessBitboardUtils::test_bit(board.white_pawns, i))    score += (PAWN_VALUE + PAWN_PST[i]);
         else if (ChessBitboardUtils::test_bit(board.white_knights, i)) score += (KNIGHT_VALUE + KNIGHT_PST[i]);
@@ -36,22 +38,60 @@ int ChessAI::evaluate(const ChessBoard& board) const {
         else if (ChessBitboardUtils::test_bit(board.white_rooks, i))  score += (ROOK_VALUE + ROOK_PST[i]);
         else if (ChessBitboardUtils::test_bit(board.white_queens, i)) score += (QUEEN_VALUE + QUEEN_PST[i]);
         else if (ChessBitboardUtils::test_bit(board.white_king, i)) score += (KING_VALUE + KING_PST[i]);
-        else if (ChessBitboardUtils::test_bit(board.black_pawns, i))   score -= (PAWN_VALUE + PAWN_PST[63 - i]); // Mirror for Black
-        else if (ChessBitboardUtils::test_bit(board.black_knights, i)) score -= (KNIGHT_VALUE + KNIGHT_PST[63 - i]); // Mirror for Black
-        else if (ChessBitboardUtils::test_bit(board.black_bishops, i)) score -= (BISHOP_VALUE + BISHOP_PST[63 - i]); // Mirror for Black
-        else if (ChessBitboardUtils::test_bit(board.black_rooks, i))  score -= (ROOK_VALUE + ROOK_PST[63 - i]); // Mirror for Black
-        else if (ChessBitboardUtils::test_bit(board.black_queens, i)) score -= (QUEEN_VALUE + QUEEN_PST[63 - i]); // Mirror for Black
-        else if (ChessBitboardUtils::test_bit(board.black_king, i)) score -= (KING_VALUE + KING_PST[63 - i]); // Mirror for Black
+        else if (ChessBitboardUtils::test_bit(board.black_pawns, i))   score -= (PAWN_VALUE + PAWN_PST[63 - i]);
+        else if (ChessBitboardUtils::test_bit(board.black_knights, i)) score -= (KNIGHT_VALUE + KNIGHT_PST[63 - i]);
+        else if (ChessBitboardUtils::test_bit(board.black_bishops, i)) score -= (BISHOP_VALUE + BISHOP_PST[63 - i]);
+        else if (ChessBitboardUtils::test_bit(board.black_rooks, i))  score -= (ROOK_VALUE + ROOK_PST[63 - i]);
+        else if (ChessBitboardUtils::test_bit(board.black_queens, i)) score -= (QUEEN_VALUE + QUEEN_PST[63 - i]);
+        else if (ChessBitboardUtils::test_bit(board.black_king, i)) score -= (KING_VALUE + KING_PST[63 - i]);
     }
     return score;
 }
 
 int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta, std::vector<Move>& variation) {
+    int original_alpha = alpha;
+
+    uint64_t current_hash = board.zobrist_hash;
+    size_t tt_index = current_hash % TT_SIZE;
+    TTEntry& entry = transposition_table[tt_index];
+
+    if (entry.hash == current_hash) {
+        int tt_score = entry.score;
+        if (std::abs(tt_score) > (MATE_VALUE - 1000)) {
+            if (tt_score > 0) {
+                tt_score -= (current_search_depth_set - depth);
+            } else {
+                tt_score += (current_search_depth_set - depth);
+            }
+        }
+
+        if (entry.depth >= depth) {
+            if (entry.flag == NodeType::EXACT) {
+                return tt_score;
+            }
+            if (entry.flag == NodeType::LOWER_BOUND && tt_score >= beta) {
+                return beta;
+            }
+            if (entry.flag == NodeType::UPPER_BOUND && tt_score <= alpha) {
+                return alpha;
+            }
+        }
+    }
+    
     nodes_evaluated_count++;
-    variation.clear();
 
     if (depth == 0) {
-        return (board.active_player == PlayerColor::White) ? evaluate(board) : -evaluate(board);
+        int eval_score = (board.active_player == PlayerColor::White) ? evaluate(board) : -evaluate(board);
+        
+        TTEntry new_entry;
+        new_entry.hash = current_hash;
+        new_entry.score = eval_score;
+        new_entry.depth = depth;
+        new_entry.flag = NodeType::EXACT;
+        new_entry.best_move = Move({0,0},{0,0},PieceTypeIndex::NONE);
+        transposition_table[tt_index] = new_entry;
+
+        return eval_score;
     }
 
     std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
@@ -59,11 +99,22 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta, std::v
     branches_explored_count += legal_moves.size();
 
     if (legal_moves.empty()) {
+        int terminal_score;
         if (board.is_king_in_check(board.active_player)) {
-            return -MATE_VALUE + (current_search_depth_set - depth);
+            terminal_score = -MATE_VALUE + (current_search_depth_set - depth);
         } else {
-            return 0;
+            terminal_score = 0;
         }
+
+        TTEntry new_entry;
+        new_entry.hash = current_hash;
+        new_entry.score = terminal_score;
+        new_entry.depth = depth;
+        new_entry.flag = NodeType::EXACT;
+        new_entry.best_move = Move({0,0},{0,0},PieceTypeIndex::NONE);
+        transposition_table[tt_index] = new_entry;
+
+        return terminal_score;
     }
 
     Move best_move_this_node = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
@@ -78,6 +129,14 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta, std::v
         board.undo_move(move, info_for_undo);
 
         if (score >= beta) {
+            TTEntry new_entry;
+            new_entry.hash = current_hash;
+            new_entry.score = beta;
+            new_entry.depth = depth;
+            new_entry.flag = NodeType::LOWER_BOUND;
+            new_entry.best_move = move;
+            transposition_table[tt_index] = new_entry;
+
             variation.push_back(move);
             variation.insert(variation.end(), sub_variation.begin(), sub_variation.end());
             return beta;
@@ -88,6 +147,21 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta, std::v
             best_sub_variation_this_node = sub_variation;
         }
     }
+
+    NodeType flag_to_store;
+    if (alpha <= original_alpha) {
+        flag_to_store = NodeType::UPPER_BOUND;
+    } else {
+        flag_to_store = NodeType::EXACT;
+    }
+
+    TTEntry new_entry;
+    new_entry.hash = current_hash;
+    new_entry.score = alpha;
+    new_entry.depth = depth;
+    new_entry.flag = flag_to_store;
+    new_entry.best_move = best_move_this_node;
+    transposition_table[tt_index] = new_entry;
 
     if (best_move_this_node.piece_moved_type_idx != PieceTypeIndex::NONE) {
         variation.push_back(best_move_this_node);
@@ -149,9 +223,9 @@ Move ChessAI::findBestMove(ChessBoard& board) {
 
     long long nodes_per_second = 0;
     if (duration_ms > 0) {
-        nodes_per_second = (nodes_evaluated_count * 1000) / duration_ms;
+        nodes_per_second = (static_cast<long long>(nodes_evaluated_count) * 1000) / duration_ms;
     } else if (nodes_evaluated_count > 0) {
-        nodes_per_second = nodes_evaluated_count * 1000000;
+        nodes_per_second = static_cast<long long>(nodes_evaluated_count) * 1000000;
     }
 
     std::cerr << "DEBUG: Carolyna: Completed search to depth " << current_search_depth_set
