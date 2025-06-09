@@ -96,12 +96,21 @@ void GameManager::handlePositionCommand(const std::string& command_line) {
 				}
 			}
 			if (!move_found) {
-                std::cerr << "DEBUG: Invalid move encountered in 'position moves' command: " << move_str << std::endl;
-                std::cerr << "DEBUG: Current FEN when invalid move was encountered: " << board.to_fen() << std::endl;
+				std::cerr << "DEBUG: Invalid move encountered in 'position moves' command: " << move_str << std::endl;
+				std::cerr << "DEBUG: Current FEN when invalid move was encountered: " << board.to_fen() << std::endl;
 				break;
 			}
 		}
 	}
+	
+	MoveGenerator move_gen;
+	std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
+
+	std::cout << "Legal moves for " << (board.active_player == PlayerColor::White ? "White" : "Black") << ":\n";
+	for (const auto& move : legal_moves) {
+		std::cout << ChessBitboardUtils::move_to_string(move) << " ";
+	}
+	std::cout << std::endl;
 }
 
 void GameManager::handleGoCommand() {

@@ -6,8 +6,10 @@
 #include <iostream>
 #include <vector>
 #include <chrono>
-#include <algorithm> // Required for std::max
-#include <limits>    // Required for std::numeric_limits
+#include <algorithm>
+#include <limits>
+#include <cmath>
+#include <string>
 
 ChessAI::ChessAI() {
     nodes_evaluated_count = 0;
@@ -40,7 +42,6 @@ int ChessAI::evaluate(const ChessBoard& board) const {
 
 int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta, std::vector<Move>& variation) {
     nodes_evaluated_count++;
-    // Clear variation for current call - important for accurate PV building
     variation.clear();
 
     if (depth == 0) {
@@ -49,6 +50,7 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta, std::v
 
     MoveGenerator move_gen;
     std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
+
     branches_explored_count += legal_moves.size();
 
     if (legal_moves.empty()) {
@@ -61,13 +63,12 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta, std::v
     for (const auto& move : legal_moves) {
         StateInfo info_for_undo;
         board.apply_move(move, info_for_undo);
+
         std::vector<Move> sub_variation;
         int score = -alphaBeta(board, depth - 1, -beta, -alpha, sub_variation);
         board.undo_move(move, info_for_undo);
 
         if (score >= beta) {
-            // Beta cutoff: Found a move that is too good for the opponent.
-            // This move is part of the PV leading to the cutoff.
             variation.emplace_back(move.from_square, move.to_square,
                                    move.piece_moved_type_idx, move.piece_captured_type_idx,
                                    move.is_promotion, move.promotion_piece_type_idx,
@@ -83,7 +84,6 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta, std::v
         }
     }
 
-    // After evaluating all moves, construct the PV for this node
     if (best_move_this_node.piece_moved_type_idx != PieceTypeIndex::NONE) {
         variation.emplace_back(best_move_this_node.from_square, best_move_this_node.to_square,
                                best_move_this_node.piece_moved_type_idx, best_move_this_node.piece_captured_type_idx,
@@ -104,9 +104,11 @@ Move ChessAI::findBestMove(ChessBoard& board) {
     std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
 
     if (legal_moves.empty()) {
-        std::cerr << "DEBUG: ChessAI: No legal moves found. Game is likely over (checkmate or stalemate)." << std::endl;
+        std::cerr << "DEBUG: Carolyna: No legal moves found. Game is likely over (checkmate or stalemate)." << std::endl;
         return Move({0,0}, {0,0}, PieceTypeIndex::NONE);
     }
+
+    PlayerColor original_active_player = board.active_player;
 
     Move final_chosen_move = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
     int best_eval = -99999999;
@@ -117,13 +119,15 @@ Move ChessAI::findBestMove(ChessBoard& board) {
     auto start_time = std::chrono::high_resolution_clock::now();
     for (const auto& move : legal_moves) {
         StateInfo info_for_undo;
-        ChessBoard temp_board_for_eval = board; // Create a temporary board for the recursive call
-
-        temp_board_for_eval.apply_move(move, info_for_undo); // Apply move to the temporary board
+        // The ChessBoard temp_board_for_eval = board; was removed here.
+        // Instead, we apply the move directly to the 'board' passed by reference.
+        board.apply_move(move, info_for_undo);
 
         std::vector<Move> current_variation;
-        int current_score = -alphaBeta(temp_board_for_eval, AI_SEARCH_DEPTH - 1, -beta, -alpha, current_variation);
-        temp_board_for_eval.undo_move(move, info_for_undo); // Undo move on temp_board_for_eval
+        // Pass 'board' directly to alphaBeta, as the move has now been applied to it.
+        int current_score = -alphaBeta(board, AI_SEARCH_DEPTH - 1, -beta, -alpha, current_variation);
+        // Undo the move immediately after the recursive call returns to restore the board state.
+        board.undo_move(move, info_for_undo);
 
         if (current_score > best_eval) {
             best_eval = current_score;
@@ -140,27 +144,43 @@ Move ChessAI::findBestMove(ChessBoard& board) {
     auto duration_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
     long long duration_ms = duration_microseconds.count() / 1000;
 
-    std::cerr << "DEBUG: ChessAI: Principal Variation: ";
+    std::cerr << "DEBUG: Carolyna: Principal Variation: ";
     for (const auto& move : best_variation) {
         std::cerr << ChessBitboardUtils::move_to_string(move) << " ";
     }
     std::cerr << std::endl;
 
-    // Remaining debug output
     long long nodes_per_second = 0;
     if (duration_ms > 0) {
         nodes_per_second = (nodes_evaluated_count * 1000) / duration_ms;
     } else if (nodes_evaluated_count > 0) {
         nodes_per_second = nodes_evaluated_count * 1000000;
     }
-    std::cerr << "DEBUG: ChessAI (Alpha-Beta Single-threaded): Completed search to depth " << current_search_depth_set
+
+    std::cerr << "DEBUG: Carolyna: Completed search to depth " << current_search_depth_set
               << ". Nodes: " << nodes_evaluated_count
               << ", Branches: " << branches_explored_count
               << ", Time: " << duration_ms << "ms"
               << ", NPS: " << nodes_per_second << std::endl;
-    std::cerr << "DEBUG: ChessAI (Alpha-Beta Single-threaded): Chose move: "
-              << ChessBitboardUtils::move_to_string(final_chosen_move)
-              << " with score (current player's perspective at root): " << best_eval << std::endl;
+    
+    int final_display_score = best_eval;
+    if (original_active_player == PlayerColor::Black) {
+        final_display_score = -best_eval;
+    }
+
+    std::string score_string;
+    if (final_display_score > 0) {
+        score_string = "+" + std::to_string(final_display_score);
+    } else if (final_display_score < 0) {
+        score_string = std::to_string(final_display_score);
+    } else {
+        score_string = "0";
+    }
+    
+    std::cerr << "DEBUG: Carolyna : Chose move for "
+              << (original_active_player == PlayerColor::White ? "White" : "Black")
+              << ": " << ChessBitboardUtils::move_to_string(final_chosen_move)
+              << " with score: " << score_string << std::endl;
 
     return final_chosen_move;
 }

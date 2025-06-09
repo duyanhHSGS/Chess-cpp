@@ -108,11 +108,11 @@ struct ChessBitboardUtils {
     // ============================================================================
 
     // Sets the bit at 'square_idx' in 'bitboard'.
-    static void set_bit(uint64_t& bitboard, int square_idx);
+    inline static void set_bit(uint64_t& bitboard, int square_idx);
     // Clears the bit at 'square_idx' in 'bitboard'.
-    static void clear_bit(uint64_t& bitboard, int square_idx);
+    inline static void clear_bit(uint64_t& bitboard, int square_idx);
     // Returns true if the bit at 'square_idx' in 'bitboard' is set.
-    static bool test_bit(uint64_t bitboard, int square_idx);
+    inline static bool test_bit(uint64_t bitboard, int square_idx);
     // Returns the index of the least significant bit (LSB) set in 'bitboard'.
     // Returns 64 if bitboard is 0.
     static int get_lsb_index(uint64_t bitboard);
