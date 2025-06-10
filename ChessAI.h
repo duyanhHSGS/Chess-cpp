@@ -6,9 +6,9 @@
 #include "Constants.h"
 #include "Move.h"
 #include "Types.h"
-#include "ChessBitboardUtils.h"
-#include <array>
+#include <vector>
 #include <cstdint>
+#include <array> // Still needed for FILE_MASKS_LOCAL in ChessAI.cpp, though not directly in ChessAI.h
 
 struct ChessAI {
 	MoveGenerator move_gen;
@@ -19,6 +19,7 @@ struct ChessAI {
 
 	static constexpr size_t TT_SIZE = 1048576;
 	static constexpr int MATE_VALUE = 30000;
+    static constexpr int MAX_PLY = 64; // Max search ply (corresponds to max depth)
 
 	struct TTEntry {
 		uint64_t hash;
@@ -110,6 +111,9 @@ struct ChessAI {
 		20,  30,  10,   0,   0,  10,  30,  20
 	};
 
+    std::vector<Move> killer_moves_storage;
+    std::vector<int> history_scores_storage;
+
 	ChessAI();
 	int evaluate(const ChessBoard& board) const;
 	int alphaBeta(ChessBoard& board, int depth, int alpha, int beta);
@@ -118,6 +122,7 @@ struct ChessAI {
 private:
     int calculate_pawn_shield_penalty_internal(const ChessBoard& board_ref, PlayerColor king_color, int king_square, uint64_t friendly_pawns_bb) const;
     int calculate_open_file_penalty_internal(const ChessBoard& board_ref, PlayerColor king_color, int king_square, uint64_t friendly_pawns_bb, uint64_t enemy_pawns_bb) const;
+    // Reverted signature: quiescence search will now always generate its own moves
     int quiescence_search_internal(ChessBoard& board_ref, int alpha, int beta);
 };
 

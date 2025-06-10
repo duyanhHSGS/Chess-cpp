@@ -34,6 +34,8 @@ ChessAI::ChessAI() : move_gen() {
     for (size_t i = 0; i < ChessAI::TT_SIZE; ++i) {
         transposition_table[i].hash = 0;
     }
+    killer_moves_storage.resize(MAX_PLY * 2, Move({0,0}, {0,0}, PieceTypeIndex::NONE));
+    history_scores_storage.resize(64 * 64, 0);
 }
 
 static constexpr int PIECE_SORT_VALUES[] = {
@@ -42,7 +44,7 @@ static constexpr int PIECE_SORT_VALUES[] = {
     330, // BISHOP (PieceTypeIndex::BISHOP = 2)
     500, // ROOK (PieceTypeIndex::ROOK = 3)
     900, // QUEEN (PieceTypeIndex::QUEEN = 4)
-    0    // KING (PieceTypeIndex::KING = 5) - not typically captured in quiescence
+    0    // KING (PieceTypeIndex::KING = 5)
 };
 
 int ChessAI::calculate_pawn_shield_penalty_internal(const ChessBoard& board_ref, PlayerColor king_color, int king_square,
@@ -133,6 +135,7 @@ int ChessAI::calculate_open_file_penalty_internal(const ChessBoard& board_ref, P
     return penalty;
 }
 
+// Reverted signature: quiescence search will now always generate its own moves
 int ChessAI::quiescence_search_internal(ChessBoard& board_ref, int alpha, int beta) {
     nodes_evaluated_count++;
 
@@ -169,6 +172,7 @@ int ChessAI::quiescence_search_internal(ChessBoard& board_ref, int alpha, int be
         alpha = stand_pat;
     }
 
+    // Quiescence search now explicitly generates its own moves at each ply
     std::vector<Move> legal_moves = move_gen.generate_legal_moves(board_ref);
 
     std::vector<Move> noisy_moves;
@@ -222,7 +226,9 @@ int ChessAI::quiescence_search_internal(ChessBoard& board_ref, int alpha, int be
         StateInfo info_for_undo;
         board_ref.apply_move(move, info_for_undo);
 
-        int score = -quiescence_search_internal(board_ref, -beta, -alpha);
+        // Recursive call to quiescence search, without passing pre-generated moves.
+        // It will generate its own moves for this deeper tactical ply.
+        int score = -quiescence_search_internal(board_ref, -beta, -alpha); 
         
         board_ref.undo_move(move, info_for_undo);
 
@@ -432,6 +438,7 @@ int ChessAI::evaluate(const ChessBoard& board) const {
 
 int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta) {
     int original_alpha = alpha;
+    int current_ply = AI_SEARCH_DEPTH - depth;
 
     uint64_t current_hash = board.zobrist_hash;
     size_t tt_index = current_hash % ChessAI::TT_SIZE;
@@ -462,25 +469,12 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta) {
     
     nodes_evaluated_count++;
 
-    if (depth == 0) {
-        return quiescence_search_internal(board, alpha, beta);
-    }
-
     std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
 
-    // Optimized move ordering: Try the TT best move first if it exists.
-    // Corrected to access piece_moved_type_idx from entry.best_move
-    if (entry.best_move.piece_moved_type_idx != PieceTypeIndex::NONE) { 
-        for (size_t i = 0; i < legal_moves.size(); ++i) {
-            if (legal_moves[i].from_square.x == entry.best_move.from_square.x &&
-                legal_moves[i].from_square.y == entry.best_move.from_square.y &&
-                legal_moves[i].to_square.x == entry.best_move.to_square.x &&
-                legal_moves[i].to_square.y == entry.best_move.to_square.y &&
-                legal_moves[i].piece_moved_type_idx == entry.best_move.piece_moved_type_idx) { 
-                std::swap(legal_moves[0], legal_moves[i]);
-                break;
-            }
-        }
+    // Now, if we've reached the search horizon, transition to the fully functional quiescence search
+    if (depth == 0) {
+        // Quiescence search will generate its own moves, as intended.
+        return quiescence_search_internal(board, alpha, beta);
     }
 
     branches_explored_count += legal_moves.size();
@@ -503,9 +497,58 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta) {
         return terminal_score;
     }
 
-    Move best_move_this_node = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
+    std::vector<std::pair<Move, int>> scored_moves;
+    scored_moves.reserve(legal_moves.size());
 
     for (const auto& move : legal_moves) {
+        int move_score = 0;
+
+        if (entry.best_move.piece_moved_type_idx != PieceTypeIndex::NONE &&
+            move.from_square.x == entry.best_move.from_square.x &&
+            move.from_square.y == entry.best_move.from_square.y &&
+            move.to_square.x == entry.best_move.to_square.x &&
+            move.to_square.y == entry.best_move.to_square.y &&
+            move.piece_moved_type_idx == entry.best_move.piece_moved_type_idx) {
+            move_score = 100000;
+        }
+        else if (move.piece_captured_type_idx != PieceTypeIndex::NONE) {
+            move_score = PIECE_SORT_VALUES[static_cast<int>(move.piece_captured_type_idx)] * 10 
+                         - PIECE_SORT_VALUES[static_cast<int>(move.piece_moved_type_idx)];
+            move_score += 10000; 
+        }
+        else if (current_ply < MAX_PLY) {
+            if (move.from_square.x == killer_moves_storage[current_ply * 2].from_square.x &&
+                move.from_square.y == killer_moves_storage[current_ply * 2].from_square.y &&
+                move.to_square.x == killer_moves_storage[current_ply * 2].to_square.x &&
+                move.to_square.y == killer_moves_storage[current_ply * 2].to_square.y &&
+                move.piece_moved_type_idx == killer_moves_storage[current_ply * 2].piece_moved_type_idx) {
+                move_score = 9000;
+            } else if (move.from_square.x == killer_moves_storage[current_ply * 2 + 1].from_square.x &&
+                       move.from_square.y == killer_moves_storage[current_ply * 2 + 1].from_square.y &&
+                       move.to_square.x == killer_moves_storage[current_ply * 2 + 1].to_square.x &&
+                       move.to_square.y == killer_moves_storage[current_ply * 2 + 1].to_square.y &&
+                       move.piece_moved_type_idx == killer_moves_storage[current_ply * 2 + 1].piece_moved_type_idx) {
+                move_score = 8000;
+            }
+        }
+        else {
+            int from_sq_idx = ChessBitboardUtils::rank_file_to_square(move.from_square.y, move.from_square.x);
+            int to_sq_idx = ChessBitboardUtils::rank_file_to_square(move.to_square.y, move.to_square.x);
+            move_score = history_scores_storage[from_sq_idx * 64 + to_sq_idx];
+        }
+
+        scored_moves.push_back({move, move_score});
+    }
+
+    std::sort(scored_moves.begin(), scored_moves.end(), [](const std::pair<Move, int>& a, const std::pair<Move, int>& b) {
+        return a.second > b.second;
+    });
+
+    Move best_move_this_node = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
+
+    for (const auto& scored_move_pair : scored_moves) {
+        const Move& move = scored_move_pair.first;
+
         StateInfo info_for_undo;
         board.apply_move(move, info_for_undo);
 
@@ -522,11 +565,24 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta) {
             new_entry.best_move = move; 
             transposition_table[tt_index] = new_entry;
 
+            if (move.piece_captured_type_idx == PieceTypeIndex::NONE &&
+                move.promotion_piece_type_idx == PieceTypeIndex::NONE &&
+                current_ply < MAX_PLY) {
+                killer_moves_storage[current_ply * 2 + 1] = killer_moves_storage[current_ply * 2];
+                killer_moves_storage[current_ply * 2] = move;
+            }
             return beta;
         }
         if (score > alpha) {
             alpha = score;
             best_move_this_node = move;
+
+            if (move.piece_captured_type_idx == PieceTypeIndex::NONE &&
+                move.promotion_piece_type_idx == PieceTypeIndex::NONE) {
+                int from_sq_idx = ChessBitboardUtils::rank_file_to_square(move.from_square.y, move.from_square.x);
+                int to_sq_idx = ChessBitboardUtils::rank_file_to_square(move.to_square.y, move.to_square.x);
+                history_scores_storage[from_sq_idx * 64 + to_sq_idx] += depth * depth; 
+            }
         }
     }
 
@@ -553,6 +609,15 @@ Move ChessAI::findBestMove(ChessBoard& board) {
     branches_explored_count = 0;
     current_search_depth_set = AI_SEARCH_DEPTH;
 
+    for (int i = 0; i < MAX_PLY; ++i) {
+        killer_moves_storage[i * 2] = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
+        killer_moves_storage[i * 2 + 1] = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
+    }
+    for (size_t i = 0; i < history_scores_storage.size(); ++i) {
+        history_scores_storage[i] = 0;
+    }
+
+
     std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
 
     if (legal_moves.empty()) {
@@ -572,6 +637,7 @@ Move ChessAI::findBestMove(ChessBoard& board) {
         StateInfo info_for_undo;
         board.apply_move(move, info_for_undo);
 
+        // Call alphaBeta, which will now transition correctly to quiescence_search_internal
         int current_score = -alphaBeta(board, AI_SEARCH_DEPTH - 1, -beta, -alpha);
         board.undo_move(move, info_for_undo);
 
@@ -581,7 +647,7 @@ Move ChessAI::findBestMove(ChessBoard& board) {
         }
         alpha = std::max(alpha, current_score);
         if (alpha >= beta) {
-            break;
+            break; 
         }
     }
     auto end_time = std::chrono::high_resolution_clock::now();
