@@ -11,7 +11,7 @@ LIBS     = -L"C:/TDM-GCC-64/lib" -L"C:/TDM-GCC-64/x86_64-w64-mingw32/lib" -stati
 INCS     = 
 CXXINCS  = -I"C:/TDM-GCC-64/x86_64-w64-mingw32/include" -I"C:/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/10.3.0/include" -I"C:/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/10.3.0/include/c++" -I"C:/TDM-GCC-64/include"
 BIN      = Carolyna.exe
-CXXFLAGS = $(CXXINCS) -std=c++17
+CXXFLAGS = $(CXXINCS) 
 CFLAGS   = $(INCS) 
 DEL      = C:\Program Files (x86)\Embarcadero\Dev-Cpp\DevCpp.exe INTERNAL_DEL
 

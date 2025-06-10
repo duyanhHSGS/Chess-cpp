@@ -1,3 +1,6 @@
+stockfish 1 core: 843k nps
+our: 500-600k nps
+
 enum class piecetypeindex
 
 move struct
@@ -400,4 +403,127 @@ DEBUG: Carolyna: Completed search to depth 5. Nodes: 199713, Branches: 433550, T
 DEBUG: Carolyna : Chose move for White: e2e4 with score: +70
 bestmove e2e4
 
+
+
+
+
+
+
+
+
+
+zobrist hash sync
+
+
+position startpos
+go
+DEBUG: Carolyna: Principal Variation: e2e4 b8c6 f1b5 c6d4 b5d7
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 133622, Branches: 370145, Time: 270ms, NPS: 494896
+DEBUG: Carolyna : Chose move for White: e2e4 with score: +70
+bestmove e2e4
+go
+DEBUG: Carolyna: Principal Variation: e2e4
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 0, Branches: 0, Time: 0ms, NPS: 0
+DEBUG: Carolyna : Chose move for White: e2e4 with score: +70
+bestmove e2e4
+position startpos moves e2e4
+go
+DEBUG: Carolyna: Principal Variation: b8c6 b1c3 g8f6 g1f3 f6e4
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 138841, Branches: 564007, Time: 306ms, NPS: 453728
+DEBUG: Carolyna : Chose move for Black: b8c6 with score: -90
+bestmove b8c6
+
+// fixed seed
+position startpos
+go
+DEBUG: Carolyna: Principal Variation: e2e4 b8c6 f1b5 c6d4 b5d7
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 133739, Branches: 370432, Time: 270ms, NPS: 495329
+DEBUG: Carolyna : Chose move for White: e2e4 with score: +70
+bestmove e2e4
+position startpos moves e2e4
+go
+DEBUG: Carolyna: Principal Variation: b8c6 b1c3 g8f6 g1f3 f6e4
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 139009, Branches: 564007, Time: 319ms, NPS: 435764
+DEBUG: Carolyna : Chose move for Black: b8c6 with score: -90
+bestmove b8c6
+position startpos moves e2e4 b8c6
+go
+DEBUG: Carolyna: Principal Variation: b1c3 c6d4 f1c4 g8f6 c4f7
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 171380, Branches: 379577, Time: 343ms, NPS: 499650
+DEBUG: Carolyna : Chose move for White: b1c3 with score: +100
+bestmove b1c3
+
+// fixed seed's node is very stable!
+// fresh start
+position startpos moves e2e4 b8c6
+go
+DEBUG: Carolyna: Principal Variation: b1c3 c6d4 f1c4 g8f6 c4f7
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 171785, Branches: 379736, Time: 351ms, NPS: 489415
+DEBUG: Carolyna : Chose move for White: b1c3 with score: +100
+bestmove b1c3
+
+position startpos
+go
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 133739, Branches: 370432, Time: 286ms, NPS: 467618
+DEBUG: Carolyna : Chose move for White: e2e4 with score: +70
+bestmove e2e4
+position startpos
+go
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 133739, Branches: 370432, Time: 286ms, NPS: 467618
+DEBUG: Carolyna : Chose move for White: e2e4 with score: +70
+bestmove e2e4
+
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 133739, Branches: 370432, Time: 265ms, NPS: 504675
+DEBUG: Carolyna : Chose move for White: e2e4 with score: +70
+bestmove e2e4
+
+
+// with sequence
+12.173.438-->1:position startpos moves e2e4 b8c6 b1c3 g8f6 g1f3 a7a6 e4e5 f6g4 f3g5 d7d5 f2f3 g4e5 f1e2 d5d4 c3e4 f7f5 e4g3 f5f4 g3e4 h7h6 g5h3 e7e6 e1g1 d4d3 e2d3 e5d3 c2d3 d8d3 h3f4 d3d4 g1h1 e8f7 d2d3 d4e5 d3d4
+12.173.438-->1:go depth 3
+12.174.469<--1:DEBUG: Carolyna: Principal Variation: c6d4 e4f2 f8d6 f4d3 e5h2 
+12.174.469<--1:DEBUG: Carolyna: Completed search to depth 5. Nodes: 365627, Branches: 2190939, Time: 1042ms, NPS: 350889
+12.174.469<--1:DEBUG: Carolyna : Chose move for Black: c6d4 with score: -235
+12.174.484<--1:bestmove c6d4
+12.174.484*1*Found move:Nc6xd4
+
+// without sequnce
+position startpos moves e2e4 b8c6 b1c3 g8f6 g1f3 a7a6 e4e5 f6g4 f3g5 d7d5 f2f3 g4e5 f1e2 d5d4 c3e4 f7f5 e4g3 f5f4 g3e4 h7h6 g5h3 e7e6 e1g1 d4d3 e2d3 e5d3 c2d3 d8d3 h3f4 d3d4 g1h1 e8f7 d2d3 d4e5 d3d4
+go
+DEBUG: Carolyna: Principal Variation: c6d4 e4f2 f8d6 f4d3 e5h2
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 371834, Branches: 2207683, Time: 1070ms, NPS: 347508
+DEBUG: Carolyna : Chose move for Black: c6d4 with score: -235
+bestmove c6d4
+
+
+
+Pawn Structure Evaluation:
+
+What it is: Pawns are the "soul of chess," and their arrangement significantly impacts a position. We can add terms to recognize and value different pawn structures.
+Improvements:
+Isolated Pawns: Penalize pawns that have no friendly pawns on adjacent files (e.g., a white pawn on d4 with no white pawns on the c or e files). They are often weak.
+Doubled Pawns: Penalize pawns on the same file (e.g., two white pawns on the c-file). They can block files and often hinder other pieces.
+Passed Pawns: Greatly bonus pawns that have no opposing pawns on their own file or adjacent files. These are highly dangerous as they can promote.
+Connected Pawns: Bonus for pawns that mutually defend each other.
+King Safety:
+
+What it is: Evaluating how well the king is protected from enemy attacks.
+Improvements:
+Pawn Shield: Reward intact pawn structures in front of the king (especially g2/h2/f2 for white castled kings). Penalize missing or advanced pawns here.
+Open Files/Diagonals: Penalize kings that are exposed to open files (especially rook files) or long diagonals (for enemy bishops/queens).
+Enemy Piece Proximity: Assess the number and type of enemy pieces that are close to the king.
+Piece Activity and Mobility:
+
+What it is: How well pieces are placed and how many squares they control or attack.
+Improvements:
+Rooks on Open/Semi-Open Files: Bonus rooks on files with no pawns (open) or only friendly pawns (semi-open), as they can apply pressure.
+Rooks on 7th/2nd Rank: Strong bonus for rooks on the opponent's 7th (or your 2nd) rank, as they often attack pawns and restrict the king.
+Bishop Pair: Bonus for having both bishops, as they can control both dark and light squares and are strong in open positions.
+Knight Outposts: Bonus for knights that are safely placed on squares deep in enemy territory, especially if supported by a pawn.
+Mobility Count: (More advanced) Count the number of legal moves a piece has and use that as a factor, though this can be computationally expensive if not done incrementally.
+Tempo and Initiative (Simple Form):
+
+What it is: While complex, a basic sense of who has the initiative can be added.
+Improvements:
+Small bonus for having the "turn" if it creates immediate threats that force a response. (This is usually handled implicitly by the search depth, but minor tweaks can be added).
 

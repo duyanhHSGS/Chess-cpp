@@ -1,43 +1,39 @@
 #ifndef TYPES_H
 #define TYPES_H
 
-#include <cstdint> // For uint64_t and uint8_t if needed elsewhere, and for common types.
+#include <cstdint> // For uint8_t
 
-// Represents the color of a player.
+// Enum for player colors
 enum class PlayerColor {
-    White = 0, // Changed from 1 to 0 for 0-based array indexing consistency
-    Black = 1  // Changed from -1 to 1 for 0-based array indexing consistency
+    White,
+    Black,
+    NONE // Used for empty squares or undefined color
 };
 
-// Represents the type of a chess piece (regardless of color).
-// Values are ordered from 0-5 to facilitate indexing into Zobrist hash arrays
-// and other piece-related lookups.
+// Enum for piece types (used for array indexing and move generation)
 enum class PieceTypeIndex {
-    PAWN = 0,    // White PAWN maps to index 0, Black PAWN maps to index 6
-    KNIGHT = 1,  // White KNIGHT maps to index 1, Black KNIGHT maps to index 7
-    BISHOP = 2,  // White BISHOP maps to index 2, Black BISHOP maps to index 8
-    ROOK = 3,    // White ROOK maps to index 3, Black ROOK maps to index 9
-    QUEEN = 4,   // White QUEEN maps to index 4, Black QUEEN maps to index 10
-    KING = 5,    // White KING maps to index 5, Black KING maps to index 11
-    NONE = -1    // Used to indicate no piece or an invalid piece type.
+    PAWN = 0,
+    KNIGHT = 1,
+    BISHOP = 2,
+    ROOK = 3,
+    QUEEN = 4,
+    KING = 5,
+    NONE = 6 // Represents an empty square or no piece
 };
 
-// Represents the current status of the game.
-enum class GameStatus {
-    ONGOING,                // Game is still in progress.
-    CHECKMATE_WHITE_WINS,   // White has checkmated Black.
-    CHECKMATE_BLACK_WINS,   // Black has checkmated White.
-    STALEMATE,              // Game is a draw due to stalemate (no legal moves, but not in check).
-    DRAW_FIFTY_MOVE,        // Game is a draw due to the 50-move rule (100 halfmoves without pawn move or capture).
-    DRAW_THREEFOLD_REPETITION // Game is a draw due to threefold repetition of position.
-};
-
-// Represents a point on the chessboard using file (x) and rank (y) coordinates.
-// x: file (0-7, where 0='a', 7='h')
-// y: rank (0-7, where 0='1', 7='8')
+// Struct to represent a point on the board (e.g., from_square, to_square)
+// x corresponds to file (0-7, 'a'-'h')
+// y corresponds to rank (0-7, '1'-'8')
 struct GamePoint {
-    uint8_t x; // File (column)
-    uint8_t y; // Rank (row)
+    uint8_t x;
+    uint8_t y;
+};
+
+// Enum for node types in the transposition table (Alpha-Beta pruning)
+enum class NodeType {
+    EXACT,       // The score is an exact minimax value
+    LOWER_BOUND, // The score is a lower bound (beta cutoff)
+    UPPER_BOUND  // The score is an upper bound (alpha cutoff)
 };
 
 #endif // TYPES_H
