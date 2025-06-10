@@ -6,7 +6,9 @@
 #include "Constants.h"
 #include "Move.h"
 #include "Types.h"
+#include "ChessBitboardUtils.h"
 #include <array>
+#include <cstdint>
 
 struct ChessAI {
 	MoveGenerator move_gen;
@@ -15,7 +17,7 @@ struct ChessAI {
 	unsigned long long branches_explored_count;
 	int current_search_depth_set;
 
-	static constexpr size_t TT_SIZE = 1048576; // 2^20
+	static constexpr size_t TT_SIZE = 1048576;
 	static constexpr int MATE_VALUE = 30000;
 
 	struct TTEntry {
@@ -112,6 +114,11 @@ struct ChessAI {
 	int evaluate(const ChessBoard& board) const;
 	int alphaBeta(ChessBoard& board, int depth, int alpha, int beta);
 	Move findBestMove(ChessBoard& board);
+
+private:
+    int calculate_pawn_shield_penalty_internal(const ChessBoard& board_ref, PlayerColor king_color, int king_square, uint64_t friendly_pawns_bb) const;
+    int calculate_open_file_penalty_internal(const ChessBoard& board_ref, PlayerColor king_color, int king_square, uint64_t friendly_pawns_bb, uint64_t enemy_pawns_bb) const;
+    int quiescence_search_internal(ChessBoard& board_ref, int alpha, int beta);
 };
 
 #endif // CHESS_AI_H

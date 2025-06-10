@@ -496,6 +496,11 @@ DEBUG: Carolyna : Chose move for Black: c6d4 with score: -235
 bestmove c6d4
 
 
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 164781, Branches: 408295, Time: 1014ms, NPS: 162505
+DEBUG: Carolyna : Chose move for White: e2e3 with score: +100
+bestmove e2e3
+
+
 
 Pawn Structure Evaluation:
 
@@ -526,4 +531,17 @@ Tempo and Initiative (Simple Form):
 What it is: While complex, a basic sense of who has the initiative can be added.
 Improvements:
 Small bonus for having the "turn" if it creates immediate threats that force a response. (This is usually handled implicitly by the search depth, but minor tweaks can be added).
+
+
+//after adding quiescence
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 245580, Branches: 518224, Time: 702ms, NPS: 349829
+DEBUG: Carolyna : Chose move for White: b1a3 with score: +5
+bestmove b1a3
+
+//before adding quiescence
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 164781, Branches: 408295, Time: 1014ms, NPS: 162505
+DEBUG: Carolyna : Chose move for White: e2e3 with score: +100
+bestmove e2e3
+
+Carolyna seems moving carefully, but this introduces more node
 

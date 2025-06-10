@@ -2,6 +2,7 @@
 #include "MoveGenerator.h"
 #include "Constants.h"
 #include "ChessBitboardUtils.h"
+#include "Types.h"
 
 #include <iostream>
 #include <vector>
@@ -10,9 +11,8 @@
 #include <limits>
 #include <cmath>
 #include <string>
-#include <array> // Still needed for std::array used in FILE_MASKS_LOCAL definition below.
+#include <array>
 
-// Out-of-class definitions for static constexpr members declared in ChessAI.h.
 const int ChessAI::PAWN_PST[64];
 const int ChessAI::KNIGHT_PST[64];
 const int ChessAI::BISHOP_PST[64];
@@ -20,14 +20,11 @@ const int ChessAI::ROOK_PST[64];
 const int ChessAI::QUEEN_PST[64];
 const int ChessAI::KING_PST[64];
 
-// Global constexpr array for file masks, accessible throughout ChessAI.cpp.
-// It's defined here (in .cpp) to ensure it's a single instance and initialized at compile time.
 const std::array<uint64_t, 8> FILE_MASKS_LOCAL = {
     ChessBitboardUtils::FILE_A, ChessBitboardUtils::FILE_B, ChessBitboardUtils::FILE_C,
     ChessBitboardUtils::FILE_D, ChessBitboardUtils::FILE_E, ChessBitboardUtils::FILE_F,
     ChessBitboardUtils::FILE_G, ChessBitboardUtils::FILE_H
 };
-
 
 ChessAI::ChessAI() : move_gen() {
     nodes_evaluated_count = 0;
@@ -39,10 +36,234 @@ ChessAI::ChessAI() : move_gen() {
     }
 }
 
+static constexpr int PIECE_SORT_VALUES[] = {
+    100, // PAWN (PieceTypeIndex::PAWN = 0)
+    320, // KNIGHT (PieceTypeIndex::KNIGHT = 1)
+    330, // BISHOP (PieceTypeIndex::BISHOP = 2)
+    500, // ROOK (PieceTypeIndex::ROOK = 3)
+    900, // QUEEN (PieceTypeIndex::QUEEN = 4)
+    0    // KING (PieceTypeIndex::KING = 5) - not typically captured in quiescence
+};
+
+int ChessAI::calculate_pawn_shield_penalty_internal(const ChessBoard& board_ref, PlayerColor king_color, int king_square,
+                                                    uint64_t friendly_pawns_bb) const {
+    int penalty = 0;
+    
+    const uint64_t WHITE_KINGSIDE_KING_ZONE = (1ULL << ChessBitboardUtils::F1_SQ) | (1ULL << ChessBitboardUtils::G1_SQ) | (1ULL << ChessBitboardUtils::H1_SQ);
+    const uint64_t WHITE_QUEENSIDE_KING_ZONE = (1ULL << ChessBitboardUtils::A1_SQ) | (1ULL << ChessBitboardUtils::B1_SQ) | (1ULL << ChessBitboardUtils::C1_SQ);
+    const uint64_t BLACK_KINGSIDE_KING_ZONE = (1ULL << ChessBitboardUtils::F8_SQ) | (1ULL << ChessBitboardUtils::G8_SQ) | (1ULL << ChessBitboardUtils::H8_SQ);
+    const uint64_t BLACK_QUEENSIDE_KING_ZONE = (1ULL << ChessBitboardUtils::A8_SQ) | (1ULL << ChessBitboardUtils::B8_SQ) | (1ULL << ChessBitboardUtils::C8_SQ);
+
+    if (king_color == PlayerColor::White) {
+        if ((board_ref.white_king & WHITE_KINGSIDE_KING_ZONE) != 0ULL) { 
+            uint64_t white_kingside_shield_mask = (1ULL << ChessBitboardUtils::rank_file_to_square(1, 5)) |
+                                                  (1ULL << ChessBitboardUtils::rank_file_to_square(1, 6)) |
+                                                  (1ULL << ChessBitboardUtils::rank_file_to_square(1, 7));
+            uint64_t missing_white_kingside_pawns = white_kingside_shield_mask & (~friendly_pawns_bb);
+            penalty -= ChessBitboardUtils::count_set_bits(missing_white_kingside_pawns) * 25;
+
+            uint64_t white_kingside_advanced_mask = (1ULL << ChessBitboardUtils::rank_file_to_square(2, 5)) |
+                                                    (1ULL << ChessBitboardUtils::rank_file_to_square(2, 6)) |
+                                                    (1ULL << ChessBitboardUtils::rank_file_to_square(2, 7));
+            uint64_t advanced_white_kingside_pawns = friendly_pawns_bb & white_kingside_advanced_mask;
+            penalty -= ChessBitboardUtils::count_set_bits(advanced_white_kingside_pawns) * 15;
+        }
+        if ((board_ref.white_king & WHITE_QUEENSIDE_KING_ZONE) != 0ULL) { 
+            uint64_t white_queenside_shield_mask = (1ULL << ChessBitboardUtils::rank_file_to_square(1, 0)) |
+                                                   (1ULL << ChessBitboardUtils::rank_file_to_square(1, 1)) |
+                                                   (1ULL << ChessBitboardUtils::rank_file_to_square(1, 2));
+            uint64_t missing_white_queenside_pawns = white_queenside_shield_mask & (~friendly_pawns_bb);
+            penalty -= ChessBitboardUtils::count_set_bits(missing_white_queenside_pawns) * 25;
+
+            uint64_t white_queenside_advanced_mask = (1ULL << ChessBitboardUtils::rank_file_to_square(2, 0)) |
+                                                     (1ULL << ChessBitboardUtils::rank_file_to_square(2, 1)) |
+                                                     (1ULL << ChessBitboardUtils::rank_file_to_square(2, 2));
+            uint64_t advanced_white_queenside_pawns = friendly_pawns_bb & white_queenside_advanced_mask;
+            penalty -= ChessBitboardUtils::count_set_bits(advanced_white_queenside_pawns) * 15;
+        }
+    } else {
+        if ((board_ref.black_king & BLACK_KINGSIDE_KING_ZONE) != 0ULL) {
+            uint64_t black_kingside_shield_mask = (1ULL << ChessBitboardUtils::rank_file_to_square(6, 5)) |
+                                                  (1ULL << ChessBitboardUtils::rank_file_to_square(6, 6)) |
+                                                  (1ULL << ChessBitboardUtils::rank_file_to_square(6, 7));
+            uint64_t missing_black_kingside_pawns = black_kingside_shield_mask & (~friendly_pawns_bb);
+            penalty -= ChessBitboardUtils::count_set_bits(missing_black_kingside_pawns) * 25;
+
+            uint64_t black_kingside_advanced_mask = (1ULL << ChessBitboardUtils::rank_file_to_square(5, 5)) |
+                                                    (1ULL << ChessBitboardUtils::rank_file_to_square(5, 6)) |
+                                                    (1ULL << ChessBitboardUtils::rank_file_to_square(5, 7));
+            uint64_t advanced_black_kingside_pawns = friendly_pawns_bb & black_kingside_advanced_mask;
+            penalty -= ChessBitboardUtils::count_set_bits(advanced_black_kingside_pawns) * 15;
+        }
+        if ((board_ref.black_king & BLACK_QUEENSIDE_KING_ZONE) != 0ULL) {
+            uint64_t black_queenside_shield_mask = (1ULL << ChessBitboardUtils::rank_file_to_square(6, 0)) |
+                                                   (1ULL << ChessBitboardUtils::rank_file_to_square(6, 1)) |
+                                                   (1ULL << ChessBitboardUtils::rank_file_to_square(6, 2));
+            uint64_t missing_black_queenside_pawns = black_queenside_shield_mask & (~friendly_pawns_bb);
+            penalty -= ChessBitboardUtils::count_set_bits(missing_black_queenside_pawns) * 25;
+
+            uint64_t black_queenside_advanced_mask = (1ULL << ChessBitboardUtils::rank_file_to_square(5, 0)) |
+                                                     (1ULL << ChessBitboardUtils::rank_file_to_square(5, 1)) |
+                                                     (1ULL << ChessBitboardUtils::rank_file_to_square(5, 2));
+            uint64_t advanced_black_queenside_pawns = friendly_pawns_bb & black_queenside_advanced_mask;
+            penalty -= ChessBitboardUtils::count_set_bits(advanced_black_queenside_pawns) * 15;
+        }
+    }
+    return penalty;
+}
+
+int ChessAI::calculate_open_file_penalty_internal(const ChessBoard& board_ref, PlayerColor king_color, int king_square,
+                                                 uint64_t friendly_pawns_bb, uint64_t enemy_pawns_bb) const {
+    int penalty = 0;
+    int king_file = king_square % 8;
+    
+    for (int f_offset = -1; f_offset <= 1; ++f_offset) {
+        int current_file = king_file + f_offset;
+        if (current_file >= 0 && current_file < 8) {
+            uint64_t file_mask = FILE_MASKS_LOCAL[current_file];
+            uint64_t file_contents = friendly_pawns_bb | enemy_pawns_bb;
+            
+            if (!((file_contents & file_mask) != 0ULL)) {
+                penalty -= 15;
+            } else if (!((friendly_pawns_bb & file_mask) != 0ULL)) {
+                penalty -= 5;
+            }
+        }
+    }
+    return penalty;
+}
+
+int ChessAI::quiescence_search_internal(ChessBoard& board_ref, int alpha, int beta) {
+    nodes_evaluated_count++;
+
+    uint64_t current_hash = board_ref.zobrist_hash;
+    size_t tt_index = current_hash % ChessAI::TT_SIZE;
+    TTEntry& entry = transposition_table[tt_index];
+
+    if (entry.hash == current_hash) {
+        if (entry.depth >= 0) {
+            if (entry.flag == NodeType::EXACT) {
+                return entry.score;
+            }
+            if (entry.flag == NodeType::LOWER_BOUND && entry.score >= beta) {
+                return beta;
+            }
+            if (entry.flag == NodeType::UPPER_BOUND && entry.score <= alpha) {
+                return alpha;
+            }
+        }
+    }
+
+    int stand_pat = (board_ref.active_player == PlayerColor::White) ? evaluate(board_ref) : -evaluate(board_ref);
+
+    if (stand_pat >= beta) {
+        TTEntry new_entry;
+        new_entry.hash = current_hash;
+        new_entry.score = beta;
+        new_entry.depth = 0;
+        new_entry.flag = NodeType::LOWER_BOUND;
+        transposition_table[tt_index] = new_entry;
+        return beta;
+    }
+    if (stand_pat > alpha) {
+        alpha = stand_pat;
+    }
+
+    std::vector<Move> legal_moves = move_gen.generate_legal_moves(board_ref);
+
+    std::vector<Move> noisy_moves;
+    noisy_moves.reserve(legal_moves.size());
+
+    for (const auto& move : legal_moves) {
+        if (move.piece_captured_type_idx != PieceTypeIndex::NONE) {
+            noisy_moves.push_back(move);
+        }
+        else if (move.promotion_piece_type_idx != PieceTypeIndex::NONE) {
+            noisy_moves.push_back(move);
+        }
+    }
+
+    std::sort(noisy_moves.begin(), noisy_moves.end(), [&](const Move& a, const Move& b) {
+        int score_a = 0;
+        int score_b = 0;
+
+        if (a.piece_captured_type_idx != PieceTypeIndex::NONE) {
+            score_a += PIECE_SORT_VALUES[static_cast<int>(a.piece_captured_type_idx)];
+        }
+        if (b.piece_captured_type_idx != PieceTypeIndex::NONE) {
+            score_b += PIECE_SORT_VALUES[static_cast<int>(b.piece_captured_type_idx)];
+        }
+        
+        if (a.promotion_piece_type_idx != PieceTypeIndex::NONE) {
+            score_a += PIECE_SORT_VALUES[static_cast<int>(a.promotion_piece_type_idx)];
+        }
+        if (b.promotion_piece_type_idx != PieceTypeIndex::NONE) {
+            score_b += PIECE_SORT_VALUES[static_cast<int>(b.promotion_piece_type_idx)];
+        }
+        
+        return score_a > score_b;
+    });
+
+    if (noisy_moves.empty()) {
+        TTEntry new_entry;
+        new_entry.hash = current_hash;
+        new_entry.score = stand_pat;
+        new_entry.depth = 0;
+        new_entry.flag = NodeType::EXACT;
+        transposition_table[tt_index] = new_entry;
+        return stand_pat;
+    }
+
+    Move best_q_move = Move({0,0}, {0,0}, PieceTypeIndex::NONE);
+
+    for (const auto& move : noisy_moves) {
+        branches_explored_count++;
+
+        StateInfo info_for_undo;
+        board_ref.apply_move(move, info_for_undo);
+
+        int score = -quiescence_search_internal(board_ref, -beta, -alpha);
+        
+        board_ref.undo_move(move, info_for_undo);
+
+        if (score >= beta) {
+            TTEntry new_entry;
+            new_entry.hash = current_hash;
+            new_entry.score = beta;
+            new_entry.depth = 0;
+            new_entry.flag = NodeType::LOWER_BOUND;
+            new_entry.best_move = move;
+            transposition_table[tt_index] = new_entry;
+            return beta;
+        }
+        if (score > alpha) {
+            alpha = score;
+            best_q_move = move;
+        }
+    }
+
+    NodeType flag_to_store_q;
+    if (alpha <= stand_pat) {
+        flag_to_store_q = NodeType::UPPER_BOUND;
+    } else {
+        flag_to_store_q = NodeType::EXACT;
+    }
+
+    TTEntry new_entry;
+    new_entry.hash = current_hash;
+    new_entry.score = alpha;
+    new_entry.depth = 0;
+    new_entry.flag = flag_to_store_q;
+    new_entry.best_move = best_q_move;
+    transposition_table[tt_index] = new_entry;
+
+    return alpha;
+}
+
+
 int ChessAI::evaluate(const ChessBoard& board) const {
     int score = 0;
 
-    // --- Phase 1: Material and Basic Piece-Square Tables (iterating all 64 squares) ---
     for (int i = 0; i < 64; ++i) {
         if (ChessBitboardUtils::test_bit(board.white_pawns, i))    score += (ChessAI::PAWN_VALUE + ChessAI::PAWN_PST[i]);
         else if (ChessBitboardUtils::test_bit(board.white_knights, i)) score += (ChessAI::KNIGHT_VALUE + ChessAI::KNIGHT_PST[i]);
@@ -58,35 +279,30 @@ int ChessAI::evaluate(const ChessBoard& board) const {
         else if (ChessBitboardUtils::test_bit(board.black_king, i)) score -= (ChessAI::KING_VALUE + ChessAI::KING_PST[63 - i]);
     }
 
-    // --- Phase 2: Advanced Pawn Structure (iterating only over pawns using bit scanning) ---
     int white_pawn_structure_score = 0;
     int black_pawn_structure_score = 0;
 
-    // Track files that have already been penalized for doubled pawns to avoid double-counting.
     uint64_t white_doubled_files_penalized = 0ULL;
     uint64_t black_doubled_files_penalized = 0ULL;
 
-    // --- Evaluate White Pawns ---
     uint64_t current_white_pawns_bb = board.white_pawns;
     while (current_white_pawns_bb) {
         int pawn_sq_idx = ChessBitboardUtils::get_lsb_index(current_white_pawns_bb);
         int file = pawn_sq_idx % 8;
         int rank = pawn_sq_idx / 8;
 
-        // I. Isolated Pawn Check (White)
         uint64_t adjacent_files_mask = 0ULL;
         if (file > 0) {
-            adjacent_files_mask |= FILE_MASKS_LOCAL[file - 1]; // Corrected: Using global FILE_MASKS_LOCAL
+            adjacent_files_mask |= FILE_MASKS_LOCAL[file - 1];
         }
         if (file < 7) {
-            adjacent_files_mask |= FILE_MASKS_LOCAL[file + 1]; // Corrected: Using global FILE_MASKS_LOCAL
+            adjacent_files_mask |= FILE_MASKS_LOCAL[file + 1];
         }
         if ((board.white_pawns & adjacent_files_mask) == 0ULL) {
             white_pawn_structure_score -= 15;
         }
 
-        // II. Doubled Pawn Check (White)
-        uint64_t current_file_mask = FILE_MASKS_LOCAL[file]; // Corrected: Using global FILE_MASKS_LOCAL
+        uint64_t current_file_mask = FILE_MASKS_LOCAL[file];
         if (!ChessBitboardUtils::test_bit(white_doubled_files_penalized, file)) {
             if (ChessBitboardUtils::count_set_bits(board.white_pawns & current_file_mask) > 1) {
                 white_pawn_structure_score -= 20;
@@ -94,7 +310,6 @@ int ChessAI::evaluate(const ChessBoard& board) const {
             }
         }
 
-        // III. Passed Pawn Check (White)
         uint64_t white_passed_pawn_mask = 0ULL;
         for (int r = rank + 1; r < 8; ++r) {
             white_passed_pawn_mask |= (1ULL << ChessBitboardUtils::rank_file_to_square(r, file));
@@ -111,7 +326,6 @@ int ChessAI::evaluate(const ChessBoard& board) const {
             white_pawn_structure_score += passed_pawn_bonus;
         }
 
-        // IV. Connected/Protected Pawn Check (White)
         uint64_t squares_attacking_this_pawn_mask = 0ULL;
         if (file > 0 && rank > 0) {
              squares_attacking_this_pawn_mask |= (1ULL << ChessBitboardUtils::rank_file_to_square(rank - 1, file - 1));
@@ -126,14 +340,12 @@ int ChessAI::evaluate(const ChessBoard& board) const {
         current_white_pawns_bb &= (current_white_pawns_bb - 1);
     }
 
-    // --- Evaluate Black Pawns (similar logic, adjusted for black's perspective) ---
     uint64_t current_black_pawns_bb = board.black_pawns;
     while (current_black_pawns_bb) {
         int pawn_sq_idx = ChessBitboardUtils::get_lsb_index(current_black_pawns_bb);
         int file = pawn_sq_idx % 8;
         int rank = pawn_sq_idx / 8;
 
-        // I. Isolated Pawn Check (Black)
         uint64_t adjacent_files_mask = 0ULL;
         if (file > 0) { adjacent_files_mask |= FILE_MASKS_LOCAL[file - 1]; }
         if (file < 7) { adjacent_files_mask |= FILE_MASKS_LOCAL[file + 1]; }
@@ -141,7 +353,6 @@ int ChessAI::evaluate(const ChessBoard& board) const {
             black_pawn_structure_score -= 15;
         }
 
-        // II. Doubled Pawn Check (Black)
         uint64_t current_file_mask = FILE_MASKS_LOCAL[file];
         if (!ChessBitboardUtils::test_bit(black_doubled_files_penalized, file)) {
             if (ChessBitboardUtils::count_set_bits(board.black_pawns & current_file_mask) > 1) {
@@ -150,7 +361,6 @@ int ChessAI::evaluate(const ChessBoard& board) const {
             }
         }
 
-        // III. Passed Pawn Check (Black)
         uint64_t black_passed_pawn_mask = 0ULL;
         for (int r = rank - 1; r >= 0; --r) {
             black_passed_pawn_mask |= (1ULL << ChessBitboardUtils::rank_file_to_square(r, file));
@@ -167,7 +377,6 @@ int ChessAI::evaluate(const ChessBoard& board) const {
             black_pawn_structure_score += passed_pawn_bonus;
         }
 
-        // IV. Connected/Protected Pawn Check (Black)
         uint64_t squares_attacking_this_pawn_mask = 0ULL;
         if (file > 0 && rank < 7) { 
              squares_attacking_this_pawn_mask |= (1ULL << ChessBitboardUtils::rank_file_to_square(rank + 1, file - 1));
@@ -182,9 +391,41 @@ int ChessAI::evaluate(const ChessBoard& board) const {
         current_black_pawns_bb &= (current_black_pawns_bb - 1);
     }
 
-    // --- Final Score Adjustment for Pawn Structure ---
     score += white_pawn_structure_score;
     score -= black_pawn_structure_score; 
+
+    int white_king_safety_score = 0;
+    int black_king_safety_score = 0;
+
+    int white_king_sq = ChessBitboardUtils::get_lsb_index(board.white_king);
+    int black_king_sq = ChessBitboardUtils::get_lsb_index(board.black_king);
+
+    white_king_safety_score += calculate_pawn_shield_penalty_internal(board, PlayerColor::White, white_king_sq, board.white_pawns);
+    black_king_safety_score += calculate_pawn_shield_penalty_internal(board, PlayerColor::Black, black_king_sq, board.black_pawns);
+
+    if (!((board.castling_rights_mask & (1 << 3)) != 0) &&
+        (board.white_king & (1ULL << ChessBitboardUtils::G1_SQ)) != 0ULL) {
+        white_king_safety_score += 30;
+    }
+    if (!((board.castling_rights_mask & (1 << 2)) != 0) &&
+        (board.white_king & (1ULL << ChessBitboardUtils::C1_SQ)) != 0ULL) {
+        white_king_safety_score += 30;
+    }
+
+    if (!((board.castling_rights_mask & (1 << 1)) != 0) &&
+        (board.black_king & (1ULL << ChessBitboardUtils::G8_SQ)) != 0ULL) {
+        black_king_safety_score += 30;
+    }
+    if (!((board.castling_rights_mask & (1 << 0)) != 0) &&
+        (board.black_king & (1ULL << ChessBitboardUtils::C8_SQ)) != 0ULL) {
+        black_king_safety_score += 30;
+    }
+
+    white_king_safety_score += calculate_open_file_penalty_internal(board, PlayerColor::White, white_king_sq, board.white_pawns, board.black_pawns);
+    black_king_safety_score += calculate_open_file_penalty_internal(board, PlayerColor::Black, black_king_sq, board.black_pawns, board.white_pawns);
+
+    score += white_king_safety_score;
+    score -= black_king_safety_score; 
 
     return score;
 }
@@ -222,19 +463,25 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta) {
     nodes_evaluated_count++;
 
     if (depth == 0) {
-        int eval_score = (board.active_player == PlayerColor::White) ? evaluate(board) : -evaluate(board);
-        
-        TTEntry new_entry;
-        new_entry.hash = current_hash;
-        new_entry.score = eval_score;
-        new_entry.depth = depth;
-        new_entry.flag = NodeType::EXACT;
-        transposition_table[tt_index] = new_entry;
-
-        return eval_score;
+        return quiescence_search_internal(board, alpha, beta);
     }
 
     std::vector<Move> legal_moves = move_gen.generate_legal_moves(board);
+
+    // Optimized move ordering: Try the TT best move first if it exists.
+    // Corrected to access piece_moved_type_idx from entry.best_move
+    if (entry.best_move.piece_moved_type_idx != PieceTypeIndex::NONE) { 
+        for (size_t i = 0; i < legal_moves.size(); ++i) {
+            if (legal_moves[i].from_square.x == entry.best_move.from_square.x &&
+                legal_moves[i].from_square.y == entry.best_move.from_square.y &&
+                legal_moves[i].to_square.x == entry.best_move.to_square.x &&
+                legal_moves[i].to_square.y == entry.best_move.to_square.y &&
+                legal_moves[i].piece_moved_type_idx == entry.best_move.piece_moved_type_idx) { 
+                std::swap(legal_moves[0], legal_moves[i]);
+                break;
+            }
+        }
+    }
 
     branches_explored_count += legal_moves.size();
 
@@ -263,6 +510,7 @@ int ChessAI::alphaBeta(ChessBoard& board, int depth, int alpha, int beta) {
         board.apply_move(move, info_for_undo);
 
         int score = -alphaBeta(board, depth - 1, -beta, -alpha);
+        
         board.undo_move(move, info_for_undo);
 
         if (score >= beta) {
