@@ -5,15 +5,15 @@ CPP      = x86_64-w64-mingw32-g++.exe
 CC       = x86_64-w64-mingw32-gcc.exe
 WINDRES  = windres.exe
 RES      = obj/Carolyna_private.res
-OBJ      = obj/main.o obj/ChessBitboardUtils.o obj/ChessBoard.o obj/MoveGenerator.o obj/GameManager.o obj/UciHandler.o obj/ChessAI.o obj/MagicTables.o $(RES)
-LINKOBJ  = obj/main.o obj/ChessBitboardUtils.o obj/ChessBoard.o obj/MoveGenerator.o obj/GameManager.o obj/UciHandler.o obj/ChessAI.o obj/MagicTables.o $(RES)
+OBJ      = obj/main.o obj/ChessBitboardUtils.o obj/ChessBoard.o obj/MoveGenerator.o obj/GameManager.o obj/UciHandler.o obj/ChessAI.o obj/MagicTables.o obj/Evaluation.o $(RES)
+LINKOBJ  = obj/main.o obj/ChessBitboardUtils.o obj/ChessBoard.o obj/MoveGenerator.o obj/GameManager.o obj/UciHandler.o obj/ChessAI.o obj/MagicTables.o obj/Evaluation.o $(RES)
 LIBS     = -L"C:/TDM-GCC-64/lib" -L"C:/TDM-GCC-64/x86_64-w64-mingw32/lib" -static-libgcc
 INCS     = 
 CXXINCS  = -I"C:/TDM-GCC-64/x86_64-w64-mingw32/include" -I"C:/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/10.3.0/include" -I"C:/TDM-GCC-64/lib/gcc/x86_64-w64-mingw32/10.3.0/include/c++" -I"C:/TDM-GCC-64/include"
 BIN      = Carolyna.exe
 CXXFLAGS = $(CXXINCS) -std=c++17
 CFLAGS   = $(INCS) 
-DEL      = C:\Program Files (x86)\Embarcadero\Dev-Cpp\DevCpp.exe INTERNAL_DEL
+DEL      = C:\Program Files (x86)\Embarcadero\Dev-Cpp\devcpp.exe INTERNAL_DEL
 
 .PHONY: all all-before all-after clean clean-custom
 
@@ -48,6 +48,9 @@ obj/ChessAI.o: ChessAI.cpp
 
 obj/MagicTables.o: MagicTables.cpp
 	$(CPP) -c MagicTables.cpp -o obj/MagicTables.o $(CXXFLAGS)
+
+obj/Evaluation.o: Evaluation.cpp
+	$(CPP) -c Evaluation.cpp -o obj/Evaluation.o $(CXXFLAGS)
 
 obj/Carolyna_private.res: Carolyna_private.rc 
 	$(WINDRES) -i Carolyna_private.rc --input-format=rc -o obj/Carolyna_private.res -O coff 

@@ -553,3 +553,8 @@ DEBUG: Carolyna : Chose move for White: b1a3 with score: +5
 bestmove b1a3
 //significant buff
 //flaws: stall for turn
+
+//after adding mobility
+DEBUG: Carolyna: Completed search to depth 5. Nodes: 23626, Branches: 42705, Time: 134ms, NPS: 176313
+DEBUG: Carolyna : Chose move for White: b1a3 with score: +8
+bestmove b1a3

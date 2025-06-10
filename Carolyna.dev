@@ -29,24 +29,24 @@ IncludeVersionInfo=1
 SupportXPThemes=0
 CompilerSet=6
 CompilerSettings=0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0;0
-UnitCount=19
+UnitCount=21
 
 [VersionInfo]
 Major=1
 Minor=0
 Release=0
-Build=366
+Build=386
 LanguageID=1033
 CharsetID=1252
 CompanyName=
-FileVersion=1.0.0.366
+FileVersion=1.0.0.386
 FileDescription=Developed using the Dev-C++ IDE
 InternalName=
 LegalCopyright=
 LegalTrademarks=
 OriginalFilename=
 ProductName=
-ProductVersion=1.0.0.366
+ProductVersion=1.0.0.386
 AutoIncBuildNr=1
 SyncProduct=1
 
@@ -235,6 +235,26 @@ FileName=README.md
 Folder=
 Compile=0
 Link=0
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit20]
+FileName=Evaluation.h
+CompileCpp=1
+Folder=
+Compile=1
+Link=1
+Priority=1000
+OverrideBuildCmd=0
+BuildCmd=
+
+[Unit21]
+FileName=Evaluation.cpp
+CompileCpp=1
+Folder=
+Compile=1
+Link=1
 Priority=1000
 OverrideBuildCmd=0
 BuildCmd=

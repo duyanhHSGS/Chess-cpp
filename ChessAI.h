@@ -3,12 +3,20 @@
 
 #include "ChessBoard.h"
 #include "MoveGenerator.h"
-#include "Constants.h"
+#include "Constants.h" // Now includes all common constants
 #include "Move.h"
 #include "Types.h"
+#include "ChessBitboardUtils.h" 
+
 #include <vector>
 #include <cstdint>
-#include <array> // Still needed for FILE_MASKS_LOCAL in ChessAI.cpp, though not directly in ChessAI.h
+#include <array>
+
+// Forward declaration of Evaluation namespace and its evaluate function
+namespace Evaluation {
+    int evaluate(const ChessBoard& board);
+}
+
 
 struct ChessAI {
 	MoveGenerator move_gen;
@@ -38,13 +46,7 @@ struct ChessAI {
 	};
 	std::vector<TTEntry> transposition_table;
 
-	static constexpr int PAWN_VALUE   = 100;
-	static constexpr int KNIGHT_VALUE = 320;
-	static constexpr int BISHOP_VALUE = 330;
-	static constexpr int ROOK_VALUE   = 500;
-	static constexpr int QUEEN_VALUE  = 900;
-	static constexpr int KING_VALUE   = 20000;
-
+    // PST tables remain here as they are large data arrays
 	static constexpr int PAWN_PST[64] = {
 		0,   0,   0,   0,   0,   0,   0,   0,
 		50,  50,  50,  50,  50,  50,  50,  50,
@@ -115,14 +117,10 @@ struct ChessAI {
     std::vector<int> history_scores_storage;
 
 	ChessAI();
-	int evaluate(const ChessBoard& board) const;
 	int alphaBeta(ChessBoard& board, int depth, int alpha, int beta);
 	Move findBestMove(ChessBoard& board);
 
 private:
-    int calculate_pawn_shield_penalty_internal(const ChessBoard& board_ref, PlayerColor king_color, int king_square, uint64_t friendly_pawns_bb) const;
-    int calculate_open_file_penalty_internal(const ChessBoard& board_ref, PlayerColor king_color, int king_square, uint64_t friendly_pawns_bb, uint64_t enemy_pawns_bb) const;
-    // Reverted signature: quiescence search will now always generate its own moves
     int quiescence_search_internal(ChessBoard& board_ref, int alpha, int beta);
 };
 
